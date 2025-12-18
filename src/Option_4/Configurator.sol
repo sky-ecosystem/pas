@@ -10,6 +10,7 @@ interface RateLimitsLike {
     }
 
     function getRateLimitData(bytes32) external view returns (RateLimitData memory);
+    function getCurrentRateLimit(bytes32) external view returns (uint256);
     function setRateLimitData(bytes32, uint256, uint256, uint256, uint256) external;
     function setUnlimitedRateLimitData(bytes32) external;
 }
@@ -112,9 +113,9 @@ contract Configurator {
    
     function setRateLimit(address pau, bytes32 key, uint256 maxAmount, uint256 slope) external govOps(pau) {
         (uint256 defMaxAmount, uint256 defSlope) = atwlState.getInitRateLimits(key, pau);
-        if (defMaxAmount == type(uint256).max && defMaxAmount == type(uint256).max) {
+        if (defMaxAmount == type(uint256).max && defSlope == 0) {
             RateLimitsLike(pau).setUnlimitedRateLimitData(key);
-            emit SetRateLimit(pau, key, maxAmount, slope);
+            emit SetRateLimit(pau, key, type(uint256).max, 0);
         } else {
             RateLimitsLike.RateLimitData memory current = RateLimitsLike(pau).getRateLimitData(key);
             bool safe = maxAmount <= defMaxAmount && slope <= defSlope || maxAmount <= current.maxAmount && slope <= current.slope;
@@ -124,7 +125,8 @@ contract Configurator {
             if (maxAmount >= current.maxAmount || slope >= current.slope) {
                 zzz[pau][key] = block.timestamp;
             }
-            RateLimitsLike(pau).setRateLimitData(key, maxAmount, slope, _min(maxAmount, current.lastAmount), block.timestamp);
+            uint256 lastAmount = RateLimitsLike(pau).getCurrentRateLimit(key);
+            RateLimitsLike(pau).setRateLimitData(key, maxAmount, slope, _min(maxAmount, lastAmount), block.timestamp);
             emit SetRateLimit(pau, key, maxAmount, slope);
         }
     }
