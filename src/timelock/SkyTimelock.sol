@@ -46,9 +46,8 @@ contract SkyTimelock is TimelockController, Pausable {
     // - Do not allow proposals to change the delay
 
     // Notes:
-    // - By default all proposers can also cancel any proposal, which is considered OK since they can already create malicious proposals,
-    // and in the unlikely event they are malicious pausing can be used.
-    // - Cancellers can cancel any proposal, not only ones they created. They are considered trusted as well.
+    // - By default all proposers can also cancel any proposal, this should be taken into account to make sure that they are trusted and that specific cancellations do not cause big harm.
+    // - Cancellers can cancel any proposal, not only ones they created. Same assumptions as above apply.
 
     constructor(
         uint256 minDelay,
@@ -59,7 +58,7 @@ contract SkyTimelock is TimelockController, Pausable {
     ) TimelockController(minDelay, proposers, new address[](0), admin) {
 
         _revokeRole(DEFAULT_ADMIN_ROLE, address(this)); // do not allow proposers to change admin-only configurations
-        require(admin != address(0), "SkyTimelock: admin cannot be zero address");
+        require(admin != address(0), "SkyTimelock/admin-zero-address");
 
         // add cancellers which are not necessarily proposers
         for (uint256 i = 0; i < cancellers.length; ++i) {
@@ -102,7 +101,7 @@ contract SkyTimelock is TimelockController, Pausable {
     // ------------------------------------------------------------------------
 
     function schedule(address, uint256, bytes calldata, bytes32, bytes32, uint256) public pure override {
-        revert("SkyTimelock: use scheduleBatch() instead");
+        revert("SkyTimelock/use-scheduleBatch");
     }
 
     function scheduleBatch(
@@ -115,7 +114,7 @@ contract SkyTimelock is TimelockController, Pausable {
     ) public virtual override whenNotPaused {
         uint256 len = targets.length;
         for (uint256 i = 0; i < len; ++i) {
-            require(targets[i] != address(this), "SkyTimelock: self calls disabled");
+            require(targets[i] != address(this), "SkyTimelock/self-calls-disabled");
         }
         
         bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
@@ -137,7 +136,7 @@ contract SkyTimelock is TimelockController, Pausable {
     // ------------------------------------------------------------------------
 
     function execute(address, uint256, bytes calldata, bytes32, bytes32) public payable override {
-        revert("SkyTimelock: use executeBatch() instead");
+        revert("SkyTimelock/use-executeBatch");
     }
 
     function executeBatch(

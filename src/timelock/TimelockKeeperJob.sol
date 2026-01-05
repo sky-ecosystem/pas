@@ -42,7 +42,7 @@ contract TimelockKeeperJob is IJob {
      * @param _timelock The SkyTimelock contract to execute operations from.
      */
     constructor(address _timelock) {
-        require(_timelock != address(0), "TimelockKeeperJob: zero address");
+        require(_timelock != address(0), "TimelockKeeperJob/zero-address");
         timelock = SkyTimelock(payable(_timelock));
     }
 
@@ -52,7 +52,7 @@ contract TimelockKeeperJob is IJob {
      */
     function work(bytes32 network, bytes calldata) public {
         bytes32 id = timelock.getNextExecutableOperation();
-        require(id != bytes32(0), "TimelockKeeperJob: no executable operation");
+        require(id != bytes32(0), "TimelockKeeperJob/no-executable-operation");
 
         // Get operation parameters using the getter function
         // Note: Public mapping getters don't work well with structs containing arrays,

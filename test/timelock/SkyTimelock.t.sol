@@ -151,7 +151,7 @@ contract SkyTimelockTest is Test {
         address[] memory cancellers = new address[](0);
         address[] memory pausers = new address[](0);
 
-        vm.expectRevert("SkyTimelock: admin cannot be zero address");
+        vm.expectRevert("SkyTimelock/admin-zero-address");
         new SkyTimelock(MIN_DELAY, address(0), proposers, cancellers, pausers);
     }
 
@@ -174,7 +174,7 @@ contract SkyTimelockTest is Test {
     function testScheduleReverts() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock: use scheduleBatch() instead");
+        vm.expectRevert("SkyTimelock/use-scheduleBatch");
         timelock.schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -221,7 +221,7 @@ contract SkyTimelockTest is Test {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock: self calls disabled");
+        vm.expectRevert("SkyTimelock/self-calls-disabled");
         _schedule(address(timelock), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -286,7 +286,7 @@ contract SkyTimelockTest is Test {
         payloads[1] = abi.encodeWithSelector(MockTarget.setValue.selector, 20);
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock: self calls disabled");
+        vm.expectRevert("SkyTimelock/self-calls-disabled");
         timelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -300,7 +300,7 @@ contract SkyTimelockTest is Test {
         _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
         vm.warp(block.timestamp + MIN_DELAY);
         
-        vm.expectRevert("SkyTimelock: use executeBatch() instead");
+        vm.expectRevert("SkyTimelock/use-executeBatch");
         timelock.execute(address(mockTarget), 0, data, bytes32(0), SALT);
     }
 
@@ -651,7 +651,7 @@ contract SkyTimelockTest is Test {
 
         // Try to schedule a call to updateDelayImmediately
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock: self calls disabled");
+        vm.expectRevert("SkyTimelock/self-calls-disabled");
         _schedule(address(timelock), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -684,7 +684,7 @@ contract SkyTimelockTest is Test {
         );
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock: self calls disabled");
+        vm.expectRevert("SkyTimelock/self-calls-disabled");
         _schedule(address(timelock), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -702,7 +702,7 @@ contract SkyTimelockTest is Test {
         );
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock: self calls disabled");
+        vm.expectRevert("SkyTimelock/self-calls-disabled");
         timelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -714,7 +714,7 @@ contract SkyTimelockTest is Test {
         );
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock: self calls disabled");
+        vm.expectRevert("SkyTimelock/self-calls-disabled");
         _schedule(address(timelock), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 
