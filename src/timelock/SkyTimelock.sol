@@ -117,10 +117,10 @@ contract SkyTimelock is TimelockController, Pausable {
             require(targets[i] != address(this), "SkyTimelock/self-calls-disabled");
         }
         
-        bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
         super.scheduleBatch(targets, values, payloads, predecessor, salt, delay);
         
         // Track operation for keeper jobs
+        bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
         _operationIds.add(id);
         operations[id] = Operation(targets, values, payloads, predecessor, salt);
     }
@@ -146,8 +146,8 @@ contract SkyTimelock is TimelockController, Pausable {
         bytes32 predecessor,
         bytes32 salt
     ) public payable virtual override whenNotPaused {
-        bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
         super.executeBatch(targets, values, payloads, predecessor, salt);
+        bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
         _operationIds.remove(id);
         delete operations[id];
     }
@@ -156,6 +156,9 @@ contract SkyTimelock is TimelockController, Pausable {
     // Keeper job helpers
     // ------------------------------------------------------------------------
 
+    // Operations may still not be executable due to various downstream conditions. 
+    // It is assumed that this is not a perfect fetching mechanism and that if needed proposals
+    // can be executed without cron keepers, or canceled in case they are jamming this mechanism.
     function getNextExecutableOperation() public view returns (bytes32 id) {
         uint256 length = _operationIds.length();
         for (uint256 i = 0; i < length; ++i) {
