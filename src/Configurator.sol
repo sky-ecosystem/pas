@@ -16,6 +16,8 @@ interface RateLimitsLike {
 }
 
 interface BeamStateLike {
+    function getHop(address) external view returns (uint256);
+    function getMaxChange(address) external view returns (uint256);
     function cBeamsForRBeams(address, address) external view returns (uint256);
     function getInitRateLimits(bytes32, address) external view returns (uint256, uint256);
     function isControllerActionEnabled(bytes32, address) external view returns (bool);
@@ -28,8 +30,6 @@ contract Configurator {
     mapping(address usr => uint256 allowed) public wards;
     mapping(address usr => uint256 allowed) public bud;
     mapping(address rBeam => mapping(bytes32 key => uint256 timestamp)) public zzz;
-    mapping(address rBeam => uint256 value) public hop;         // rBeam == address(0) => general backup configuration
-    mapping(address rBeam => uint256 value) public maxChange;   // rBeam == address(0) => general backup configuration
 
     // --- Immutables ---
 
@@ -45,8 +45,6 @@ contract Configurator {
     event Deny(address indexed usr);
     event Kiss(address indexed usr);
     event Diss(address indexed usr);
-    event SetHop(address indexed rBeam, uint256 value);
-    event SetMaxChange(address indexed rBeam, uint256 value);
     event SetRateLimit(address indexed rBeam, bytes32 indexed key, uint256 maxAmount, uint256 slope);
 
     // --- Modifiers ---
@@ -98,17 +96,6 @@ contract Configurator {
         emit Diss(usr);
     }
 
-    function setHop(address rBeam, uint256 value) external auth {
-        hop[rBeam] = value;
-        emit SetHop(rBeam, value);
-    }
-
-    function setMaxChange(address rBeam, uint256 value) external auth {
-        require(value >= WAD, "Configurator/maxChange-below-1x");
-        maxChange[rBeam] = value;
-        emit SetMaxChange(rBeam, value);
-    }
-
     // cBeams functions
    
     function setRateLimit(address rBeam, bytes32 key, uint256 maxAmount, uint256 slope) external cBeamsForRBeams(rBeam) {
@@ -119,11 +106,10 @@ contract Configurator {
         } else {
             RateLimitsLike.RateLimitData memory current = RateLimitsLike(rBeam).getRateLimitData(key);
             bool safe = maxAmount <= defMaxAmount && slope <= defSlope || maxAmount <= current.maxAmount && slope <= current.slope;
-            uint256 hop_ = hop[rBeam]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
-            uint256 maxChange_ = maxChange[rBeam]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
-            require(safe || block.timestamp >= zzz[rBeam][key] + hop_, "Configurator/increment-too-soon");
-            require(safe || maxAmount <= current.maxAmount * maxChange_ / WAD, "Configurator/maxChange-maxAmount"); // maxChange always >= WAD
-            require(safe || slope <= current.slope * maxChange_ / WAD, "Configurator/maxChange-slope");
+            uint256 maxChange = beamState.getMaxChange(rBeam);
+            require(safe || block.timestamp >= zzz[rBeam][key] + beamState.getHop(rBeam), "Configurator/increment-too-soon");
+            require(safe || maxAmount <= current.maxAmount * maxChange / WAD, "Configurator/maxChange-maxAmount"); // maxChange always >= WAD
+            require(safe || slope <= current.slope * maxChange / WAD, "Configurator/maxChange-slope");
             if (maxAmount >= current.maxAmount || slope >= current.slope) {
                 zzz[rBeam][key] = block.timestamp;
             }

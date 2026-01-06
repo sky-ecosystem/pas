@@ -10,16 +10,24 @@ contract BeamState {
     mapping(address rBeam => mapping(address cBeam => uint256 allowed))       public cBeamsForRBeams;       // allowed == 0 => false, allowed == 1 => true
     mapping(bytes32 key => mapping(address rBeam => DefaultRateLimits limit)) public initRateLimits;        // rBeam == address(0) every rBeam allowed
     mapping(bytes32 key => mapping(address rBeam => bool allowed))            public initControllerActions; // rBeam == address(0) every rBeam allowed
+    mapping(address rBeam => uint256 value)                                   public hop;                   // rBeam == address(0) => general backup configuration
+    mapping(address rBeam => uint256 value)                                   public maxChange;             // rBeam == address(0) => general backup configuration
 
     struct DefaultRateLimits {
         uint256 maxAmount;
         uint256 slope;
     }
 
+    // --- Constants ---
+
+    uint256 internal constant WAD = 10**18;
+
     // --- Events ---
 
     event Rely(address indexed usr);
     event Deny(address indexed usr);
+    event SetHop(address indexed rBeam, uint256 value);
+    event SetMaxChange(address indexed rBeam, uint256 value);
     event AddCBeam(address indexed cBeam);
     event DelCBeam(address indexed cBeam);
     event AddCBeamForRBeam(address indexed rBeam, address indexed cBeam);
@@ -44,6 +52,14 @@ contract BeamState {
     }
 
     // --- External getters ---
+
+    function getHop(address rBeam) external view returns (uint256 hop_) {
+        hop_ = hop[rBeam]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
+    }
+
+    function getMaxChange(address rBeam) external view returns (uint256 maxChange_) {
+        maxChange_ = maxChange[rBeam]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
+    }
 
     function getInitRateLimits(bytes32 key, address rBeam) external view returns (DefaultRateLimits memory defaultRateLimits) {
         defaultRateLimits = initRateLimits[key][rBeam];
@@ -71,6 +87,17 @@ contract BeamState {
     }
 
     // TODO: for now roles system is outsourced to an external contract for the following functions:
+
+    function setHop(address rBeam, uint256 value) external auth {
+        hop[rBeam] = value;
+        emit SetHop(rBeam, value);
+    }
+
+    function setMaxChange(address rBeam, uint256 value) external auth {
+        require(value >= WAD, "Configurator/maxChange-below-1x");
+        maxChange[rBeam] = value;
+        emit SetMaxChange(rBeam, value);
+    }
 
     function addCBeam(address cBeam) external auth {
         cBeams[cBeam] = 1;
