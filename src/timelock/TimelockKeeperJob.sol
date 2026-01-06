@@ -16,73 +16,76 @@
 
 pragma solidity ^0.8.21;
 
-import {SkyTimelock} from "./SkyTimelock.sol";
-
 interface IJob {
     function workable(bytes32 network) external returns (bool, bytes memory);
 }
 
-/**
- * @title TimelockKeeperJob
- * @dev Keeper job contract for executing ready timelock operations.
- * 
- * This contract implements the dss-cron IJob interface to allow automated
- * execution of ready timelock operations. It iterates through executable
- * operations and executes them one at a time.
- * 
- * Reference: https://github.com/sky-ecosystem/dss-cron/blob/master/src/FlapJob.sol
- */
+interface SequencerLike {
+    function isMaster(bytes32 network) external view returns (bool);
+}
+
+interface SkyTimelockLike {
+    struct Operation {
+        address[] targets;
+        uint256[] values;
+        bytes[] payloads;
+        bytes32 predecessor;
+        bytes32 salt;
+    }
+
+    function getNextExecutableOperation() external view returns (bytes32 id);
+    function getOperation(bytes32 id) external view returns (Operation memory op);
+    function executeBatch(
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata payloads,
+        bytes32 predecessor,
+        bytes32 salt
+    ) external payable;
+}
+
 contract TimelockKeeperJob is IJob {
-    SkyTimelock public immutable timelock;
+
+    SequencerLike   public immutable sequencer;
+    SkyTimelockLike public immutable timelock;
+
+    // --- Errors ---
+    error NotMaster(bytes32 network);
+    error NoExecutableOperation();
 
     // --- Events ---
     event Work(bytes32 indexed network, bytes32 indexed operationId);
 
-    /**
-     * @param _timelock The SkyTimelock contract to execute operations from.
-     */
-    constructor(address _timelock) {
-        require(_timelock != address(0), "TimelockKeeperJob/zero-address");
-        timelock = SkyTimelock(payable(_timelock));
+    constructor(address _sequencer, address _timelock) {
+        sequencer = SequencerLike(_sequencer);
+        timelock  = SkyTimelockLike(_timelock);
     }
 
-    /**
-     * @dev Executes the next executable operation.
-     * @param network The network identifier (unused, required by IJob interface)
-     */
-    function work(bytes32 network, bytes calldata) public {
-        bytes32 id = timelock.getNextExecutableOperation();
-        require(id != bytes32(0), "TimelockKeeperJob/no-executable-operation");
+    function work(bytes32 network, bytes calldata) external {
+        if (!sequencer.isMaster(network)) revert NotMaster(network);
 
-        // Get operation parameters using the getter function
-        // Note: Public mapping getters don't work well with structs containing arrays,
-        // so we use the explicit getOperation() function
-        SkyTimelock.Operation memory op = timelock.getOperation(id);
+        bytes32 id = timelock.getNextExecutableOperation();
+        if (id == bytes32(0)) revert NoExecutableOperation();
+
+        SkyTimelockLike.Operation memory op = timelock.getOperation(id);
         
-        // Execute using executeBatch (works for both single and batch operations)
-        // Single operations are stored as arrays of length 1
+        // Assume that in case a proposal needs eth the timelock is pre-funded, or alternatively it is executed manually 
         timelock.executeBatch{value: 0}(op.targets, op.values, op.payloads, op.predecessor, op.salt);
         
         emit Work(network, id);
     }
 
-    /**
-     * @dev Returns whether there is work to be done (an executable operation exists).
-     * Uses try/catch to test if work() would succeed.
-     * @param network The network identifier (unused, required by IJob interface)
-     * @return canWork true if work can be executed, false otherwise
-     * @return args The arguments to pass to work() (empty bytes)
-     */
-    function workable(bytes32 network) external override returns (bool canWork, bytes memory args) {
-        bytes memory emptyArgs = "";
-        
-        try this.work(network, emptyArgs) {
+    function workable(bytes32 network) external override returns (bool, bytes memory) {
+        if (!sequencer.isMaster(network)) return (false, bytes("Network is not master"));
+
+        bytes memory args = "";
+        try this.work(network, args) {
             // Work succeeds
-            return (true, emptyArgs);
+            return (true, args);
         } catch {
             // Can not work -- carry on
         }
-        
+
         return (false, bytes("No executable operation"));
     }
 }
