@@ -2,15 +2,17 @@
 pragma solidity ^0.8.21;
 
 interface BeamState {
-    function addCBeam(address cBeam) external;
-    function delCBeam(address cBeam) external;
-    function addCBeamForRBeam(address rBeam, address cBeam) external;
-    function delCBeamForRBeam(address rBeam, address cBeam) external;
-    function addInitRateLimits(bytes32 key, address rBeam, uint256 maxAmount, uint256 slope) external;
-    function addInitControllerActions(bytes calldata data, address rBeam) external returns (bytes32 key);
-    function delInitRateLimits(bytes32 key, address rBeam) external;
-    function addInitControllerActions(bytes32 key, address rBeam) external;
-    function delInitControllerActions(bytes32 key, address rBeam) external;
+    function setHop(address, uint256) external;
+    function setMaxChange(address, uint256) external;
+    function addCBeam(address) external;
+    function delCBeam(address) external;
+    function addCBeamForRBeam(address, address) external;
+    function delCBeamForRBeam(address, address) external;
+    function addInitRateLimits(bytes32, address, uint256, uint256) external;
+    function addInitControllerActions(bytes calldata, address) external returns (bytes32);
+    function delInitRateLimits(bytes32, address) external;
+    function addInitControllerActions(bytes32, address) external;
+    function delInitControllerActions(bytes32, address) external;
 }
 
 abstract contract BeamRole {
@@ -30,6 +32,14 @@ abstract contract BeamRole {
 
 contract BeamRoleTimeLock is BeamRole {
     constructor(address signer_, address beamState_) BeamRole(signer_, beamState_) {
+    }
+
+    function setHop(address rBeam, uint256 value) external onlySigner {
+        beamState.setHop(rBeam, value);
+    }
+
+    function setMaxChange(address rBeam, uint256 value) external onlySigner {
+        beamState.setHop(rBeam, value);
     }
 
     function addCBeam(address cBeam) external onlySigner {

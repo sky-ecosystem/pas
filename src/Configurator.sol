@@ -27,8 +27,6 @@ contract Configurator {
 
     // --- Storage variables ---
 
-    mapping(address usr => uint256 allowed) public wards;
-    mapping(address usr => uint256 allowed) public bud;
     mapping(address rBeam => mapping(bytes32 key => uint256 timestamp)) public zzz;
 
     // --- Immutables ---
@@ -41,18 +39,9 @@ contract Configurator {
 
     // --- Events ---
 
-    event Rely(address indexed usr);
-    event Deny(address indexed usr);
-    event Kiss(address indexed usr);
-    event Diss(address indexed usr);
     event SetRateLimit(address indexed rBeam, bytes32 indexed key, uint256 maxAmount, uint256 slope);
 
     // --- Modifiers ---
-
-    modifier auth() {
-        require(wards[msg.sender] == 1, "Configurator/not-authorized");
-        _;
-    }
 
     modifier cBeamsForRBeams(address rBeam) {
         require(beamState.cBeamsForRBeams(rBeam, msg.sender) == 1, "Configurator/not-authorized-cBeam");
@@ -62,38 +51,13 @@ contract Configurator {
     // --- Constructor ---
 
     constructor(address beamState_) {
-        require(beamState_ != address(0), "Configurator/null-beamState");
         beamState = BeamStateLike(beamState_);
-        wards[msg.sender] = 1;
-        emit Rely(msg.sender);
     }
 
     // --- Internal functions ---
 
     function _min(uint256 x, uint256 y) internal pure returns (uint256 z) {
         z = x < y ? x : y;
-    }
-
-    // --- Admin functions ---
-
-    function rely(address usr) external auth {
-        wards[usr] = 1;
-        emit Rely(usr);
-    }
-
-    function deny(address usr) external auth {
-        wards[usr] = 0;
-        emit Deny(usr);
-    }
-
-    function kiss(address usr) external auth {
-        bud[usr] = 1;
-        emit Kiss(usr);
-    }
-
-    function diss(address usr) external auth {
-        bud[usr] = 0;
-        emit Diss(usr);
     }
 
     // cBeams functions
