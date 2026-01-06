@@ -1,10 +1,25 @@
+// SPDX-FileCopyrightText: © 2025 Dai Foundation <www.daifoundation.org>
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 pragma solidity ^0.8.21;
 
 // Code aligned to: https://github.com/sunbreak1211/pau/blob/a3e4b519c238d32c08c82145f04341144361e943/src/Option_4/Configurator.sol
 // TODO: Rename `pau` parameter to `almController` and `rateLimiter` - current name is ambiguous (depends on external contract changes)
 
-import {SkyTimelock} from "./SkyTimelock.sol";
+import {SkyTimelock} from "src/timelock/SkyTimelock.sol";
 
 interface ATWLRoleTimeLockLike {
     function addGovOps(address pau, address usr) external;
@@ -73,13 +88,13 @@ contract ATWLTimeLockedWrapper {
     event Diss(address indexed usr);
     event ProposalSubmitted(bytes32 indexed operationId, string functionName);
     
-    SkyTimelock public immutable timelock;
+    SkyTimelock          public immutable timelock;
     ATWLRoleTimeLockLike public immutable atwlRoleTimeLock; // TODO: consider changing to atwlState
-    address public immutable mainnetController; // TODO: unused for now
+    address              public immutable mainnetController; // TODO: unused for now
     
     constructor(address timelock_, address atwlRoleTimeLock_, address mainnetController_) {
-        timelock = SkyTimelock(payable(timelock_));
-        atwlRoleTimeLock = ATWLRoleTimeLockLike(atwlRoleTimeLock_);
+        timelock          = SkyTimelock(payable(timelock_));
+        atwlRoleTimeLock  = ATWLRoleTimeLockLike(atwlRoleTimeLock_);
         mainnetController = mainnetController_;
         
         wards[msg.sender] = 1;
@@ -98,16 +113,6 @@ contract ATWLTimeLockedWrapper {
 
         operationId = timelock.hashOperationBatch(targets, values, payloads, predecessor, salt);
         timelock.scheduleBatch(targets, values, payloads, predecessor, salt, delay);
-    }
-
-    function _submitControllerAction(bytes memory controllerData, address pau, bytes32 predecessor, bytes32 salt, uint256 delay) internal returns (bytes32 operationId) {
-        bytes memory payload = abi.encodeWithSelector(
-            ATWLRoleTimeLockLike.addInitControllerActions.selector,
-            controllerData,
-            pau
-        );
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
     }
 
     // --- Governance Operations ---
@@ -189,8 +194,9 @@ contract ATWLTimeLockedWrapper {
             destinationDomain,
             mintRecipient
         );
-        
-        operationId = _submitControllerAction(controllerData, pau, predecessor, salt, delay);
+        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMintRecipient");
     }
     
@@ -207,8 +213,9 @@ contract ATWLTimeLockedWrapper {
             destinationEndpointId,
             layerZeroRecipient
         );
-        
-        operationId = _submitControllerAction(controllerData, pau, predecessor, salt, delay);
+        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setLayerZeroRecipient");
     }
     
@@ -225,8 +232,9 @@ contract ATWLTimeLockedWrapper {
             pool,
             maxSlippage
         );
-        
-        operationId = _submitControllerAction(controllerData, pau, predecessor, salt, delay);
+        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMaxSlippage");
     }
     
@@ -243,8 +251,9 @@ contract ATWLTimeLockedWrapper {
             exchange,
             otcBuffer
         );
-        
-        operationId = _submitControllerAction(controllerData, pau, predecessor, salt, delay);
+        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setOTCBuffer");
     }
     
@@ -261,8 +270,9 @@ contract ATWLTimeLockedWrapper {
             exchange,
             rechargeRate18
         );
-        
-        operationId = _submitControllerAction(controllerData, pau, predecessor, salt, delay);
+        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setOTCRechargeRate");
     }
     
@@ -281,8 +291,9 @@ contract ATWLTimeLockedWrapper {
             asset,
             isWhitelisted
         );
-        
-        operationId = _submitControllerAction(controllerData, pau, predecessor, salt, delay);
+        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setOTCWhitelistedAsset");
     }
     
@@ -303,8 +314,9 @@ contract ATWLTimeLockedWrapper {
             tickUpperMax,
             maxTickSpacing
         );
-        
-        operationId = _submitControllerAction(controllerData, pau, predecessor, salt, delay);
+        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setUniswapV4TickLimits");
     }
     
@@ -323,8 +335,9 @@ contract ATWLTimeLockedWrapper {
             shares,
             maxExpectedAssets
         );
-        
-        operationId = _submitControllerAction(controllerData, pau, predecessor, salt, delay);
+        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMaxExchangeRate");
     }
 }

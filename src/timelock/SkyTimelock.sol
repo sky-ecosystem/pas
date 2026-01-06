@@ -88,10 +88,7 @@ contract SkyTimelock is TimelockController, Pausable {
     // Delay management
     // ------------------------------------------------------------------------
 
-    /**
-     * @dev Change delay without timelock.
-     * Can not override updateDelay as we need an external call to the inherited function to change msg.sender.
-     */
+    // Can not override updateDelay as we need an external call to the inherited function to change msg.sender.
     function updateDelayImmediately(uint256 newDelay) external onlyRole(DEFAULT_ADMIN_ROLE) {
         this.updateDelay(newDelay);
     }
