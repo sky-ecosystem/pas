@@ -15,8 +15,8 @@ interface RateLimitsLike {
     function setUnlimitedRateLimitData(bytes32) external;
 }
 
-interface ATWLStateLike {
-    function govOps(address, address) external view returns (uint256);
+interface BeamStateLike {
+    function cBeamsForRBeams(address, address) external view returns (uint256);
     function getInitRateLimits(bytes32, address) external view returns (uint256, uint256);
     function isControllerActionEnabled(bytes32, address) external view returns (bool);
 }
@@ -27,13 +27,13 @@ contract Configurator {
 
     mapping(address usr => uint256 allowed) public wards;
     mapping(address usr => uint256 allowed) public bud;
-    mapping(address pau => mapping(bytes32 key => uint256 timestamp)) public zzz;
-    uint256 public hop;
-    uint256 public maxChange;
+    mapping(address rBeam => mapping(bytes32 key => uint256 timestamp)) public zzz;
+    mapping(address rBeam => uint256 value) public hop;         // rBeam == address(0) => general backup configuration
+    mapping(address rBeam => uint256 value) public maxChange;   // rBeam == address(0) => general backup configuration
 
     // --- Immutables ---
 
-    ATWLStateLike public immutable atwlState;
+    BeamStateLike public immutable beamState;
 
     // --- Constants ---
 
@@ -45,8 +45,9 @@ contract Configurator {
     event Deny(address indexed usr);
     event Kiss(address indexed usr);
     event Diss(address indexed usr);
-    event File(bytes32 indexed what, uint256 data);
-    event SetRateLimit(address indexed pau, bytes32 indexed key, uint256 maxAmount, uint256 slope);
+    event SetHop(address indexed rBeam, uint256 value);
+    event SetMaxChange(address indexed rBeam, uint256 value);
+    event SetRateLimit(address indexed rBeam, bytes32 indexed key, uint256 maxAmount, uint256 slope);
 
     // --- Modifiers ---
 
@@ -55,16 +56,16 @@ contract Configurator {
         _;
     }
 
-    modifier govOps(address pau) {
-        require(atwlState.govOps(pau, msg.sender) == 1, "Configurator/not-authorized-govOps");
+    modifier cBeamsForRBeams(address rBeam) {
+        require(beamState.cBeamsForRBeams(rBeam, msg.sender) == 1, "Configurator/not-authorized-cBeam");
         _;
     }
 
     // --- Constructor ---
 
-    constructor(address atwlState_) {
-        require(atwlState_ != address(0), "Configurator/null-atwlState");
-        atwlState = ATWLStateLike(atwlState_);
+    constructor(address beamState_) {
+        require(beamState_ != address(0), "Configurator/null-beamState");
+        beamState = BeamStateLike(beamState_);
         wards[msg.sender] = 1;
         emit Rely(msg.sender);
     }
@@ -97,44 +98,45 @@ contract Configurator {
         emit Diss(usr);
     }
 
-    function file(bytes32 what, uint256 data) external auth {
-        if (what == "hop") {
-            hop = data;
-        } else if (what == "maxChange") {
-            require(data >= WAD, "Configurator/maxChange-below-1x");
-            maxChange = data;
-        } else {
-            revert("Configurator/file-unrecognized-param");
-        }
-        emit File(what, data);
+    function setHop(address rBeam, uint256 value) external auth {
+        hop[rBeam] = value;
+        emit SetHop(rBeam, value);
     }
 
-    // GovOps functions
+    function setMaxChange(address rBeam, uint256 value) external auth {
+        require(value >= WAD, "Configurator/maxChange-below-1x");
+        maxChange[rBeam] = value;
+        emit SetMaxChange(rBeam, value);
+    }
+
+    // cBeams functions
    
-    function setRateLimit(address pau, bytes32 key, uint256 maxAmount, uint256 slope) external govOps(pau) {
-        (uint256 defMaxAmount, uint256 defSlope) = atwlState.getInitRateLimits(key, pau);
+    function setRateLimit(address rBeam, bytes32 key, uint256 maxAmount, uint256 slope) external cBeamsForRBeams(rBeam) {
+        (uint256 defMaxAmount, uint256 defSlope) = beamState.getInitRateLimits(key, rBeam);
         if (defMaxAmount == type(uint256).max && defSlope == 0) {
-            RateLimitsLike(pau).setUnlimitedRateLimitData(key);
-            emit SetRateLimit(pau, key, type(uint256).max, 0);
+            RateLimitsLike(rBeam).setUnlimitedRateLimitData(key);
+            emit SetRateLimit(rBeam, key, type(uint256).max, 0);
         } else {
-            RateLimitsLike.RateLimitData memory current = RateLimitsLike(pau).getRateLimitData(key);
+            RateLimitsLike.RateLimitData memory current = RateLimitsLike(rBeam).getRateLimitData(key);
             bool safe = maxAmount <= defMaxAmount && slope <= defSlope || maxAmount <= current.maxAmount && slope <= current.slope;
-            require(safe || block.timestamp >= zzz[pau][key] + hop, "Configurator/increment-too-soon");
-            require(safe || maxAmount <= current.maxAmount * maxChange / WAD, "Configurator/maxChange-maxAmount"); // maxChange always >= WAD
-            require(safe || slope <= current.slope * maxChange / WAD, "Configurator/maxChange-slope");
+            uint256 hop_ = hop[rBeam]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
+            uint256 maxChange_ = maxChange[rBeam]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
+            require(safe || block.timestamp >= zzz[rBeam][key] + hop_, "Configurator/increment-too-soon");
+            require(safe || maxAmount <= current.maxAmount * maxChange_ / WAD, "Configurator/maxChange-maxAmount"); // maxChange always >= WAD
+            require(safe || slope <= current.slope * maxChange_ / WAD, "Configurator/maxChange-slope");
             if (maxAmount >= current.maxAmount || slope >= current.slope) {
-                zzz[pau][key] = block.timestamp;
+                zzz[rBeam][key] = block.timestamp;
             }
-            uint256 lastAmount = RateLimitsLike(pau).getCurrentRateLimit(key);
-            RateLimitsLike(pau).setRateLimitData(key, maxAmount, slope, _min(maxAmount, lastAmount), block.timestamp);
-            emit SetRateLimit(pau, key, maxAmount, slope);
+            uint256 lastAmount = RateLimitsLike(rBeam).getCurrentRateLimit(key);
+            RateLimitsLike(rBeam).setRateLimitData(key, maxAmount, slope, _min(maxAmount, lastAmount), block.timestamp);
+            emit SetRateLimit(rBeam, key, maxAmount, slope);
         }
     }
 
-    function callControllerAction(address pau, bytes calldata data) external govOps(pau) returns (bytes memory ret) {
-        require(atwlState.isControllerActionEnabled(keccak256(data), pau), "Configurator/not-valid-data");
+    function callControllerAction(address rBeam, bytes calldata data) external cBeamsForRBeams(rBeam) returns (bytes memory ret) {
+        require(beamState.isControllerActionEnabled(keccak256(data), rBeam), "Configurator/not-valid-data");
         bool ok;
-        (ok, ret) = pau.call(data);
+        (ok, ret) = rBeam.call(data);
         require(ok, "Configurator/call-failed");
     }
 }

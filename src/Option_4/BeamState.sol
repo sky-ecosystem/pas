@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-contract ATWLState {
+contract BeamState {
 
     // --- Storage variables ---
 
     mapping(address usr => uint256 allowed)                                 public wards;
-    mapping(address pau => mapping(address usr => uint256 allowed))         public govOps;
+    mapping(address cBeam => uint256 added)                                 public cBeams;                // allowed == 0 => false, allowed == 1 => 
+    mapping(address rBeam => mapping(address cBeam => uint256 allowed))     public cBeamsForRBeams;       // allowed == 0 => false, allowed == 1 => true
     mapping(bytes32 key => mapping(address pau => DefaultRateLimits limit)) public initRateLimits;        // pau == address(0) every pau allowed
     mapping(bytes32 key => mapping(address pau => bool allowed))            public initControllerActions; // pau == address(0) every pau allowed
 
@@ -19,17 +20,19 @@ contract ATWLState {
 
     event Rely(address indexed usr);
     event Deny(address indexed usr);
-    event AddGovOps(address indexed pau, address indexed usr);
-    event DelGovOps(address indexed pau, address indexed usr);
-    event AddInitRateLimits(bytes32 indexed key, address indexed pau, uint256 maxAmount, uint256 slope);
-    event DelInitRateLimits(bytes32 indexed key, address indexed pau);
-    event AddInitControllerActions(bytes32 indexed key, address indexed pau);
-    event DelInitControllerActions(bytes32 indexed key, address indexed pau);
+    event AddCBeam(address indexed cBeam);
+    event DelCBeam(address indexed cBeam);
+    event AddCBeamForRBeam(address indexed rBeam, address indexed cBeam);
+    event DelCBeamForRBeam(address indexed rBeam, address indexed cBeam);
+    event AddInitRateLimits(bytes32 indexed key, address indexed rBeam, uint256 maxAmount, uint256 slope);
+    event DelInitRateLimits(bytes32 indexed key, address indexed rBeam);
+    event AddInitControllerActions(bytes32 indexed key, address indexed rBeam);
+    event DelInitControllerActions(bytes32 indexed key, address indexed rBeam);
 
     // --- Modifiers ---
 
     modifier auth() {
-        require(wards[msg.sender] == 1, "Configurator/not-authorized");
+        require(wards[msg.sender] == 1, "BeamState/not-authorized");
         _;
     }
 
@@ -69,14 +72,25 @@ contract ATWLState {
 
     // TODO: for now roles system is outsourced to an external contract for the following functions:
 
-    function addGovOps(address pau, address usr) external auth {
-        govOps[pau][usr] = 1;
-        emit AddGovOps(pau, usr);
+    function addCBeam(address cBeam) external auth {
+        cBeams[cBeam] = 1;
+        emit AddCBeam(cBeam);
     }
 
-    function delGovOps(address pau, address usr) external auth {
-        govOps[pau][usr] = 0;
-        emit DelGovOps(pau, usr);
+    function delCBeam(address cBeam) external auth {
+        cBeams[cBeam] = 0;
+        emit DelCBeam(cBeam);
+    }
+
+    function addCBeamForRBeam(address rBeam, address cBeam) external auth {
+        require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
+        cBeamsForRBeams[rBeam][cBeam] = 1;
+        emit AddCBeamForRBeam(rBeam, cBeam);
+    }
+
+    function delCBeamForRBeam(address rBeam, address cBeam) external auth {
+        cBeamsForRBeams[rBeam][cBeam] = 0;
+        emit DelCBeamForRBeam(rBeam, cBeam);
     }
 
     function addInitRateLimits(bytes32 key, address pau, uint256 maxAmount, uint256 slope) external auth {
