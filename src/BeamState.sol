@@ -6,6 +6,8 @@ contract BeamState {
     // --- Storage variables ---
 
     mapping(address usr => uint256 allowed)                                 public wards;
+    mapping(address usr => bytes32 rolesData)                               public userRoles;
+    mapping(bytes4  sig => bytes32 rolesData)                               public actionsRoles;
     mapping(address cBeam => uint256 added)                                 public cBeams;                // allowed == 0 => false, allowed == 1 => true
     mapping(address pau => mapping(address cBeam => uint256 allowed))       public pauCBeams;             // allowed == 0 => false, allowed == 1 => true
     mapping(bytes32 key => mapping(address pau => DefaultRateLimits limit)) public initRateLimits;        // pau == address(0) every pau allowed
@@ -26,6 +28,8 @@ contract BeamState {
 
     event Rely(address indexed usr);
     event Deny(address indexed usr);
+    event SetUserRole(address indexed who, uint8 indexed role, bool enabled);
+    event SetRoleAction(uint8 indexed role, bytes4 sig, bool enabled);
     event SetHop(address indexed pau, uint256 value);
     event SetMaxChange(address indexed pau, uint256 value);
     event AddCBeam(address indexed cBeam);
@@ -44,6 +48,14 @@ contract BeamState {
         _;
     }
 
+    modifier roleAuth() {
+        require(
+            userRoles[msg.sender] & actionsRoles[msg.sig] != bytes32(0) ||
+            wards[msg.sender] == 1, "BeamState/role-not-authorized"
+        );
+        _;
+    }
+
     // --- Constructor ---
 
     constructor() {
@@ -52,6 +64,14 @@ contract BeamState {
     }
 
     // --- External getters ---
+
+    function hasUserRole(address usr, uint8 role) external view returns (bool has) {
+        has = userRoles[usr] & bytes32(uint256(1) << role) != bytes32(0);
+    }
+
+    function isActionInRole(bytes4 sig, uint8 role) external view returns (bool has) {
+        has = actionsRoles[sig] & bytes32(uint256(1) << role) != bytes32(0);
+    }
 
     function getHop(address pau) external view returns (uint256 hop_) {
         hop_ = hop[pau]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
@@ -86,65 +106,84 @@ contract BeamState {
         emit Deny(usr);
     }
 
-    // TODO: for now roles system is outsourced to an external contract for the following functions:
+    function setUserRole(address who, uint8 role, bool enabled) public auth {
+        bytes32 mask = bytes32(uint256(1) << role);
+        if (enabled) {
+            userRoles[who] |= mask;
+        } else {
+            userRoles[who] &= ~mask;
+        }
+        emit SetUserRole(who, role, enabled);
+    }
 
-    function setHop(address pau, uint256 value) external auth {
+    function setRoleAction(uint8 role, bytes4 sig, bool enabled) external auth {
+        bytes32 mask = bytes32(uint256(1) << role);
+        if (enabled) {
+            actionsRoles[sig] |= mask;
+        } else {
+            actionsRoles[sig] &= ~mask;
+        }
+        emit SetRoleAction(role, sig, enabled);
+    }
+
+    // --- Role authed functions ---
+
+    function setHop(address pau, uint256 value) external roleAuth {
         hop[pau] = value;
         emit SetHop(pau, value);
     }
 
-    function setMaxChange(address pau, uint256 value) external auth {
+    function setMaxChange(address pau, uint256 value) external roleAuth {
         require(value >= WAD, "Configurator/maxChange-below-1x");
         maxChange[pau] = value;
         emit SetMaxChange(pau, value);
     }
 
-    function addCBeam(address cBeam) external auth {
+    function addCBeam(address cBeam) external roleAuth {
         cBeams[cBeam] = 1;
         emit AddCBeam(cBeam);
     }
 
-    function delCBeam(address cBeam) external auth {
+    function delCBeam(address cBeam) external roleAuth {
         cBeams[cBeam] = 0;
         emit DelCBeam(cBeam);
     }
 
-    function setCBeamForPau(address pau, address cBeam) external auth {
+    function setCBeamForPau(address pau, address cBeam) external roleAuth {
         require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
         pauCBeams[pau][cBeam] = 1;
         emit SetCBeamForPau(pau, cBeam);
     }
 
-    function unsetCBeamForPau(address pau, address cBeam) external auth {
+    function unsetCBeamForPau(address pau, address cBeam) external roleAuth {
         pauCBeams[pau][cBeam] = 0;
         emit UnsetCBeamForPau(pau, cBeam);
     }
 
-    function addInitRateLimits(bytes32 key, address pau, uint256 maxAmount, uint256 slope) external auth {
+    function addInitRateLimits(bytes32 key, address pau, uint256 maxAmount, uint256 slope) external roleAuth {
         initRateLimits[key][pau] = DefaultRateLimits(maxAmount, slope);
         emit AddInitRateLimits(key, pau, maxAmount, slope);
     }
 
-    function delInitRateLimits(bytes32 key, address pau) external auth {
+    function delInitRateLimits(bytes32 key, address pau) external roleAuth {
         delete initRateLimits[key][pau];
         emit DelInitRateLimits(key, pau);
     }
 
-    function addInitControllerActions(bytes calldata data, address pau) external auth returns (bytes32 key) {
+    function addInitControllerActions(bytes calldata data, address pau) external roleAuth returns (bytes32 key) {
         key = keccak256(data);
         initControllerActions[key][pau] = true;
         emit AddInitControllerActions(key, pau);
     }
 
-    function addInitControllerActions(bytes32 key, address pau) external auth {
+    function addInitControllerActions(bytes32 key, address pau) external roleAuth {
         // TODO: We will have to remove this function if finally having to save or log the raw data for enumeration purposes
         initControllerActions[key][pau] = true;
         emit AddInitControllerActions(key, pau);
     }
 
-    function delInitControllerActions(bytes32 key, address pau) external auth {
+    function delInitControllerActions(bytes32 key, address pau) external roleAuth {
         delete initControllerActions[key][pau];
         emit DelInitControllerActions(key, pau);
     }
-
 }
