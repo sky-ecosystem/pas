@@ -5,13 +5,13 @@ contract BeamState {
 
     // --- Storage variables ---
 
-    mapping(address usr => uint256 allowed)                                   public wards;
-    mapping(address cBeam => uint256 added)                                   public cBeams;                // allowed == 0 => false, allowed == 1 => true
-    mapping(address rBeam => mapping(address cBeam => uint256 allowed))       public cBeamsForRBeams;       // allowed == 0 => false, allowed == 1 => true
-    mapping(bytes32 key => mapping(address rBeam => DefaultRateLimits limit)) public initRateLimits;        // rBeam == address(0) every rBeam allowed
-    mapping(bytes32 key => mapping(address rBeam => bool allowed))            public initControllerActions; // rBeam == address(0) every rBeam allowed
-    mapping(address rBeam => uint256 value)                                   public hop;                   // rBeam == address(0) => general backup configuration
-    mapping(address rBeam => uint256 value)                                   public maxChange;             // rBeam == address(0) => general backup configuration
+    mapping(address usr => uint256 allowed)                                 public wards;
+    mapping(address cBeam => uint256 added)                                 public cBeams;                // allowed == 0 => false, allowed == 1 => true
+    mapping(address pau => mapping(address cBeam => uint256 allowed))       public pauCBeams;             // allowed == 0 => false, allowed == 1 => true
+    mapping(bytes32 key => mapping(address pau => DefaultRateLimits limit)) public initRateLimits;        // pau == address(0) every pau allowed
+    mapping(bytes32 key => mapping(address pau => bool allowed))            public initControllerActions; // pau == address(0) every pau allowed
+    mapping(address pau => uint256 value)                                   public hop;                   // pau == address(0) => general backup configuration
+    mapping(address pau => uint256 value)                                   public maxChange;             // pau == address(0) => general backup configuration
 
     struct DefaultRateLimits {
         uint256 maxAmount;
@@ -26,16 +26,16 @@ contract BeamState {
 
     event Rely(address indexed usr);
     event Deny(address indexed usr);
-    event SetHop(address indexed rBeam, uint256 value);
-    event SetMaxChange(address indexed rBeam, uint256 value);
+    event SetHop(address indexed pau, uint256 value);
+    event SetMaxChange(address indexed pau, uint256 value);
     event AddCBeam(address indexed cBeam);
     event DelCBeam(address indexed cBeam);
-    event AddCBeamForRBeam(address indexed rBeam, address indexed cBeam);
-    event DelCBeamForRBeam(address indexed rBeam, address indexed cBeam);
-    event AddInitRateLimits(bytes32 indexed key, address indexed rBeam, uint256 maxAmount, uint256 slope);
-    event DelInitRateLimits(bytes32 indexed key, address indexed rBeam);
-    event AddInitControllerActions(bytes32 indexed key, address indexed rBeam);
-    event DelInitControllerActions(bytes32 indexed key, address indexed rBeam);
+    event SetCBeamForPau(address indexed pau, address indexed cBeam);
+    event UnsetCBeamForPau(address indexed pau, address indexed cBeam);
+    event AddInitRateLimits(bytes32 indexed key, address indexed pau, uint256 maxAmount, uint256 slope);
+    event DelInitRateLimits(bytes32 indexed key, address indexed pau);
+    event AddInitControllerActions(bytes32 indexed key, address indexed pau);
+    event DelInitControllerActions(bytes32 indexed key, address indexed pau);
 
     // --- Modifiers ---
 
@@ -53,25 +53,25 @@ contract BeamState {
 
     // --- External getters ---
 
-    function getHop(address rBeam) external view returns (uint256 hop_) {
-        hop_ = hop[rBeam]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
+    function getHop(address pau) external view returns (uint256 hop_) {
+        hop_ = hop[pau]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
     }
 
-    function getMaxChange(address rBeam) external view returns (uint256 maxChange_) {
-        maxChange_ = maxChange[rBeam]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
+    function getMaxChange(address pau) external view returns (uint256 maxChange_) {
+        maxChange_ = maxChange[pau]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
     }
 
-    function getInitRateLimits(bytes32 key, address rBeam) external view returns (DefaultRateLimits memory defaultRateLimits) {
-        defaultRateLimits = initRateLimits[key][rBeam];
+    function getInitRateLimits(bytes32 key, address pau) external view returns (DefaultRateLimits memory defaultRateLimits) {
+        defaultRateLimits = initRateLimits[key][pau];
         if (defaultRateLimits.maxAmount == 0 || defaultRateLimits.slope == 0) {
-            // If not set for specific rBeam, check in general
+            // If not set for specific pau, check in general
             defaultRateLimits = initRateLimits[key][address(0)];
         }
     }
 
-    function isControllerActionEnabled(bytes32 key, address rBeam) external view returns (bool ok) {
-        ok = initControllerActions[key][address(0)] || // address(0) enabled for every rBeam
-             initControllerActions[key][rBeam];
+    function isControllerActionEnabled(bytes32 key, address pau) external view returns (bool ok) {
+        ok = initControllerActions[key][address(0)] || // address(0) enabled for every pau
+             initControllerActions[key][pau];
     }
 
     // --- Admin functions ---
@@ -88,15 +88,15 @@ contract BeamState {
 
     // TODO: for now roles system is outsourced to an external contract for the following functions:
 
-    function setHop(address rBeam, uint256 value) external auth {
-        hop[rBeam] = value;
-        emit SetHop(rBeam, value);
+    function setHop(address pau, uint256 value) external auth {
+        hop[pau] = value;
+        emit SetHop(pau, value);
     }
 
-    function setMaxChange(address rBeam, uint256 value) external auth {
+    function setMaxChange(address pau, uint256 value) external auth {
         require(value >= WAD, "Configurator/maxChange-below-1x");
-        maxChange[rBeam] = value;
-        emit SetMaxChange(rBeam, value);
+        maxChange[pau] = value;
+        emit SetMaxChange(pau, value);
     }
 
     function addCBeam(address cBeam) external auth {
@@ -109,42 +109,42 @@ contract BeamState {
         emit DelCBeam(cBeam);
     }
 
-    function addCBeamForRBeam(address rBeam, address cBeam) external auth {
+    function setCBeamForPau(address pau, address cBeam) external auth {
         require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
-        cBeamsForRBeams[rBeam][cBeam] = 1;
-        emit AddCBeamForRBeam(rBeam, cBeam);
+        pauCBeams[pau][cBeam] = 1;
+        emit SetCBeamForPau(pau, cBeam);
     }
 
-    function delCBeamForRBeam(address rBeam, address cBeam) external auth {
-        cBeamsForRBeams[rBeam][cBeam] = 0;
-        emit DelCBeamForRBeam(rBeam, cBeam);
+    function unsetCBeamForPau(address pau, address cBeam) external auth {
+        pauCBeams[pau][cBeam] = 0;
+        emit UnsetCBeamForPau(pau, cBeam);
     }
 
-    function addInitRateLimits(bytes32 key, address rBeam, uint256 maxAmount, uint256 slope) external auth {
-        initRateLimits[key][rBeam] = DefaultRateLimits(maxAmount, slope);
-        emit AddInitRateLimits(key, rBeam, maxAmount, slope);
+    function addInitRateLimits(bytes32 key, address pau, uint256 maxAmount, uint256 slope) external auth {
+        initRateLimits[key][pau] = DefaultRateLimits(maxAmount, slope);
+        emit AddInitRateLimits(key, pau, maxAmount, slope);
     }
 
-    function delInitRateLimits(bytes32 key, address rBeam) external auth {
-        delete initRateLimits[key][rBeam];
-        emit DelInitRateLimits(key, rBeam);
+    function delInitRateLimits(bytes32 key, address pau) external auth {
+        delete initRateLimits[key][pau];
+        emit DelInitRateLimits(key, pau);
     }
 
-    function addInitControllerActions(bytes calldata data, address rBeam) external auth returns (bytes32 key) {
+    function addInitControllerActions(bytes calldata data, address pau) external auth returns (bytes32 key) {
         key = keccak256(data);
-        initControllerActions[key][rBeam] = true;
-        emit AddInitControllerActions(key, rBeam);
+        initControllerActions[key][pau] = true;
+        emit AddInitControllerActions(key, pau);
     }
 
-    function addInitControllerActions(bytes32 key, address rBeam) external auth {
+    function addInitControllerActions(bytes32 key, address pau) external auth {
         // TODO: We will have to remove this function if finally having to save or log the raw data for enumeration purposes
-        initControllerActions[key][rBeam] = true;
-        emit AddInitControllerActions(key, rBeam);
+        initControllerActions[key][pau] = true;
+        emit AddInitControllerActions(key, pau);
     }
 
-    function delInitControllerActions(bytes32 key, address rBeam) external auth {
-        delete initControllerActions[key][rBeam];
-        emit DelInitControllerActions(key, rBeam);
+    function delInitControllerActions(bytes32 key, address pau) external auth {
+        delete initControllerActions[key][pau];
+        emit DelInitControllerActions(key, pau);
     }
 
 }
