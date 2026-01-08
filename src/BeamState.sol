@@ -176,12 +176,6 @@ contract BeamState {
         emit AddInitControllerActions(key, pau);
     }
 
-    function addInitControllerActions(bytes32 key, address pau) external roleAuth {
-        // TODO: We will have to remove this function if finally having to save or log the raw data for enumeration purposes
-        initControllerActions[key][pau] = true;
-        emit AddInitControllerActions(key, pau);
-    }
-
     function delInitControllerActions(bytes32 key, address pau) external roleAuth {
         delete initControllerActions[key][pau];
         emit DelInitControllerActions(key, pau);
