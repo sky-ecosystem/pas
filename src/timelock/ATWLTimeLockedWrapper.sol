@@ -16,10 +16,11 @@
 
 pragma solidity ^0.8.21;
 
-// Code aligned to: https://github.com/sunbreak1211/pau/blob/a3e4b519c238d32c08c82145f04341144361e943/src/Option_4/Configurator.sol
+// PAU code aligned to: https://github.com/sunbreak1211/pau/blob/a3e4b519c238d32c08c82145f04341144361e943/src/Option_4/Configurator.sol
+// Mainnet controller aligned to: https://github.com/sparkdotfi/spark-alm-controller/blob/3dbc7cb01739e91dad61a75cda8d7c84b4474e0b/src/MainnetController.sol
 // TODO: Rename `pau` parameter to `almController` and `rateLimiter` - current name is ambiguous (depends on external contract changes)
 
-import {SkyTimelock} from "src/timelock/SkyTimelock.sol";
+import { SkyTimelock } from "src/timelock/SkyTimelock.sol";
 
 interface ATWLRoleTimeLockLike {
     function addGovOps(address pau, address usr) external;

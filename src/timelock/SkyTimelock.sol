@@ -16,9 +16,9 @@
 
 pragma solidity ^0.8.21;
 
-import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
+import { EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract SkyTimelock is TimelockController, Pausable {
     using EnumerableSet for EnumerableSet.Bytes32Set;
