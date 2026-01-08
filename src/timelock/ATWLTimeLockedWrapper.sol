@@ -17,7 +17,8 @@
 pragma solidity ^0.8.21;
 
 // PAU code aligned to: https://github.com/sunbreak1211/pau/blob/a3e4b519c238d32c08c82145f04341144361e943/src/Option_4/Configurator.sol
-// Mainnet controller aligned to: https://github.com/sparkdotfi/spark-alm-controller/blob/3dbc7cb01739e91dad61a75cda8d7c84b4474e0b/src/MainnetController.sol
+// Spark Mainnet controller aligned to: https://github.com/sparkdotfi/spark-alm-controller/blob/3dbc7cb01739e91dad61a75cda8d7c84b4474e0b/src/MainnetController.sol
+// Grove Mainnet controller aligned to: https://github.com/grove-labs/grove-alm-controller/blob/548c96fa22bcb13afd25cb592ec8cb4bb98c2d86/src/MainnetController.sol
 // TODO: Rename `pau` parameter to `almController` and `rateLimiter` - current name is ambiguous (depends on external contract changes)
 // TODO: Decide if we want to keep all the direct access functions or use a more generic approach
 
@@ -38,14 +39,23 @@ interface BeamStateLike {
 }
 
 interface MainnetControllerLike {
+    
+    // Spark functions	
     function setMintRecipient(uint32 destinationDomain, bytes32 mintRecipient) external;
     function setLayerZeroRecipient(uint32 destinationEndpointId, bytes32 layerZeroRecipient) external;
     function setMaxSlippage(address pool, uint256 maxSlippage) external;
+    function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
     function setOTCBuffer(address exchange, address otcBuffer) external;
     function setOTCRechargeRate(address exchange, uint256 rechargeRate18) external;
     function setOTCWhitelistedAsset(address exchange, address asset, bool isWhitelisted) external;
-    function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
     function setUniswapV4TickLimits(bytes32 poolId, int24 tickLowerMin, int24 tickUpperMax, uint24 maxTickSpacing) external;
+
+    // Grove-only functions
+    function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external;
+    function setUniswapV3PoolLowerTick(address pool, int24 lowerTick) external;
+    function setUniswapV3PoolUpperTick(address pool, int24 upperTick) external;
+    function setUniswapV3PoolMaxTickDelta(address pool, uint24 maxTickDelta) external;
+    function setUniswapV3PoolTwapSecondsAgo(address pool, uint32 twapSecondsAgo) external;
 }
 
 struct RateLimitConfig {
@@ -418,6 +428,105 @@ contract ATWLTimeLockedWrapper {
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMaxExchangeRate");
     }
+    
+    // Grove-only functions
+    
+    function setCentrifugeRecipient(
+        uint16 centrifugeId,
+        bytes32 recipient,
+        address pau,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            MainnetControllerLike.setCentrifugeRecipient.selector,
+            centrifugeId,
+            recipient
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setCentrifugeRecipient");
+    }
+    
+    function setUniswapV3PoolLowerTick(
+        address pool,
+        int24 lowerTick,
+        address pau,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            MainnetControllerLike.setUniswapV3PoolLowerTick.selector,
+            pool,
+            lowerTick
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setUniswapV3PoolLowerTick");
+    }
+    
+    function setUniswapV3PoolUpperTick(
+        address pool,
+        int24 upperTick,
+        address pau,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            MainnetControllerLike.setUniswapV3PoolUpperTick.selector,
+            pool,
+            upperTick
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setUniswapV3PoolUpperTick");
+    }
+    
+    function setUniswapV3PoolMaxTickDelta(
+        address pool,
+        uint24 maxTickDelta,
+        address pau,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            MainnetControllerLike.setUniswapV3PoolMaxTickDelta.selector,
+            pool,
+            maxTickDelta
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setUniswapV3PoolMaxTickDelta");
+    }
+    
+    function setUniswapV3PoolTwapSecondsAgo(
+        address pool,
+        uint32 twapSecondsAgo,
+        address pau,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            MainnetControllerLike.setUniswapV3PoolTwapSecondsAgo.selector,
+            pool,
+            twapSecondsAgo
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setUniswapV3PoolTwapSecondsAgo");
+    }
+
+    // --- Deletion Functions ---
 
     function delInitControllerActions(bytes32 key, address pau, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
         bytes memory payload = abi.encodeWithSelector(
