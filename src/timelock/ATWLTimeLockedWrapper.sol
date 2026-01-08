@@ -19,14 +19,22 @@ pragma solidity ^0.8.21;
 // PAU code aligned to: https://github.com/sunbreak1211/pau/blob/a3e4b519c238d32c08c82145f04341144361e943/src/Option_4/Configurator.sol
 // Mainnet controller aligned to: https://github.com/sparkdotfi/spark-alm-controller/blob/3dbc7cb01739e91dad61a75cda8d7c84b4474e0b/src/MainnetController.sol
 // TODO: Rename `pau` parameter to `almController` and `rateLimiter` - current name is ambiguous (depends on external contract changes)
+// TODO: Decide if we want to keep all the direct access functions or use a more generic approach
 
 import { SkyTimelock } from "src/timelock/SkyTimelock.sol";
 
-interface ATWLRoleTimeLockLike {
-    function addGovOps(address pau, address usr) external;
+interface BeamStateLike {
+    function setHop(address pau, uint256 value) external;
+    function setMaxChange(address pau, uint256 value) external;
+    function addCBeam(address cBeam) external;
+    function delCBeam(address cBeam) external;
+    function setCBeamForPau(address pau, address cBeam) external;
+    function unsetCBeamForPau(address pau, address cBeam) external;
     function addInitRateLimits(bytes32 key, address pau, uint256 maxAmount, uint256 slope) external;
+    function delInitRateLimits(bytes32 key, address pau) external;
     function addInitControllerActions(bytes calldata data, address pau) external returns (bytes32 key);
-    // Note: The overloaded function addInitControllerActions(bytes32 key, address pau) from ATWLRole.sol (lines 45-46) is not supported
+    // Note: The overloaded function addInitControllerActions(bytes32 key, address pau) from BeamState.sol is not supported
+    function delInitControllerActions(bytes32 key, address pau) external;
 }
 
 interface MainnetControllerLike {
@@ -89,13 +97,13 @@ contract ATWLTimeLockedWrapper {
     event Diss(address indexed usr);
     event ProposalSubmitted(bytes32 indexed operationId, string functionName);
     
-    SkyTimelock          public immutable timelock;
-    ATWLRoleTimeLockLike public immutable atwlRoleTimeLock; // TODO: consider changing to atwlState
-    address              public immutable mainnetController; // TODO: unused for now
+    SkyTimelock   public immutable timelock;
+    BeamStateLike public immutable beamState;
+    address       public immutable mainnetController; // TODO: unused for now
     
-    constructor(address timelock_, address atwlRoleTimeLock_, address mainnetController_) {
+    constructor(address timelock_, address beamState_, address mainnetController_) {
         timelock          = SkyTimelock(payable(timelock_));
-        atwlRoleTimeLock  = ATWLRoleTimeLockLike(atwlRoleTimeLock_);
+        beamState         = BeamStateLike(beamState_);
         mainnetController = mainnetController_;
         
         wards[msg.sender] = 1;
@@ -104,7 +112,7 @@ contract ATWLTimeLockedWrapper {
     
     function _submitProposal(bytes memory payload, bytes32 predecessor, bytes32 salt, uint256 delay) internal returns (bytes32 operationId) {
         address[] memory targets = new address[](1);
-        targets[0] = address(atwlRoleTimeLock);
+        targets[0] = address(beamState);
 
         uint256[] memory values = new uint256[](1);
         values[0] = 0;
@@ -116,17 +124,75 @@ contract ATWLTimeLockedWrapper {
         timelock.scheduleBatch(targets, values, payloads, predecessor, salt, delay);
     }
 
+    // --- Configuration Parameters ---
+
+    function setHop(address pau, uint256 value, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(
+            BeamStateLike.setHop.selector,
+            pau,
+            value
+        );
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setHop");
+    }
+
+    function setMaxChange(address pau, uint256 value, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(
+            BeamStateLike.setMaxChange.selector,
+            pau,
+            value
+        );
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setMaxChange");
+    }
+
+    // --- CBeam Management ---
+
+    function addCBeam(address cBeam, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(
+            BeamStateLike.addCBeam.selector,
+            cBeam
+        );
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "addCBeam");
+    }
+
+    function delCBeam(address cBeam, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(
+            BeamStateLike.delCBeam.selector,
+            cBeam
+        );
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "delCBeam");
+    }
+
     // --- Governance Operations ---
 
-    function addGovOps(address pau, address usr, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+    function addGovOps(address pau, address cBeam, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        // Maps to setCBeamForPau in BeamState - requires cBeam to be added first via addCBeam
         bytes memory payload = abi.encodeWithSelector(
-            ATWLRoleTimeLockLike.addGovOps.selector,
+            BeamStateLike.setCBeamForPau.selector,
             pau,
-            usr
+            cBeam
         );
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "addGovOps");
+    }
+
+    function removeGovOps(address pau, address cBeam, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(
+            BeamStateLike.unsetCBeamForPau.selector,
+            pau,
+            cBeam
+        );
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "removeGovOps");
     }
 
     // --- Rate Limits ---
@@ -138,7 +204,7 @@ contract ATWLTimeLockedWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory payload = abi.encodeWithSelector(
-            ATWLRoleTimeLockLike.addInitRateLimits.selector,
+            BeamStateLike.addInitRateLimits.selector,
             config.key,
             config.pau,
             config.maxAmount,
@@ -161,12 +227,12 @@ contract ATWLTimeLockedWrapper {
         address[] memory targets = new address[](len);
         uint256[] memory values = new uint256[](len);
         bytes[] memory payloads = new bytes[](len);
-        address target = address(atwlRoleTimeLock);
+        address target = address(beamState);
 
         for (uint256 i = 0; i < len; ++i) {
             targets[i] = target;
             payloads[i] = abi.encodeWithSelector(
-                ATWLRoleTimeLockLike.addInitRateLimits.selector,
+                BeamStateLike.addInitRateLimits.selector,
                 configs[i].key,
                 configs[i].pau,
                 configs[i].maxAmount,
@@ -178,6 +244,17 @@ contract ATWLTimeLockedWrapper {
         timelock.scheduleBatch(targets, values, payloads, predecessor, salt, delay);
 
         emit ProposalSubmitted(operationId, "batchAddInitRateLimits");
+    }
+
+    function delInitRateLimits(bytes32 key, address pau, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(
+            BeamStateLike.delInitRateLimits.selector,
+            key,
+            pau
+        );
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "delInitRateLimits");
     }
 
     // --- Controller Actions ---
@@ -195,7 +272,7 @@ contract ATWLTimeLockedWrapper {
             destinationDomain,
             mintRecipient
         );
-        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMintRecipient");
@@ -214,7 +291,7 @@ contract ATWLTimeLockedWrapper {
             destinationEndpointId,
             layerZeroRecipient
         );
-        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setLayerZeroRecipient");
@@ -233,7 +310,7 @@ contract ATWLTimeLockedWrapper {
             pool,
             maxSlippage
         );
-        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMaxSlippage");
@@ -252,7 +329,7 @@ contract ATWLTimeLockedWrapper {
             exchange,
             otcBuffer
         );
-        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setOTCBuffer");
@@ -271,7 +348,7 @@ contract ATWLTimeLockedWrapper {
             exchange,
             rechargeRate18
         );
-        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setOTCRechargeRate");
@@ -292,7 +369,7 @@ contract ATWLTimeLockedWrapper {
             asset,
             isWhitelisted
         );
-        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setOTCWhitelistedAsset");
@@ -315,7 +392,7 @@ contract ATWLTimeLockedWrapper {
             tickUpperMax,
             maxTickSpacing
         );
-        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setUniswapV4TickLimits");
@@ -336,10 +413,21 @@ contract ATWLTimeLockedWrapper {
             shares,
             maxExpectedAssets
         );
-        bytes memory payload = abi.encodeWithSelector(ATWLRoleTimeLockLike.addInitControllerActions.selector, controllerData, pau);
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, pau);
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMaxExchangeRate");
+    }
+
+    function delInitControllerActions(bytes32 key, address pau, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(
+            BeamStateLike.delInitControllerActions.selector,
+            key,
+            pau
+        );
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "delInitControllerActions");
     }
 }
 
