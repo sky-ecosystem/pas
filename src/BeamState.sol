@@ -83,6 +83,7 @@ contract BeamState {
 
     function getInitRateLimits(bytes32 key, address pau) external view returns (DefaultRateLimits memory defaultRateLimits) {
         defaultRateLimits = initRateLimits[key][pau];
+        // TODO: fix the next conditional to use "&&" instead of "||" as otherwise you can not set unlimited rate limit for a specific pau, tests also need to be revisited due to this change
         if (defaultRateLimits.maxAmount == 0 || defaultRateLimits.slope == 0) {
             // If not set for specific pau, check in general
             defaultRateLimits = initRateLimits[key][address(0)];
