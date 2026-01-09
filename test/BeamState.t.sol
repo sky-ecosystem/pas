@@ -166,29 +166,29 @@ contract BeamStateTest is DssTest {
 
     function testSetHop() public {
         vm.expectEmit();
-        emit SetHop(PAU1, 86400);
-        beamState.setHop(PAU1, 86400);
+        emit SetHop(PAU1, 86_400);
+        beamState.setHop(PAU1, 86_400);
 
-        assertEq(beamState.hop(PAU1), 86400, "hop should be set for PAU1");
-        assertEq(beamState.getHop(PAU1), 86400, "getHop should return correct value");
+        assertEq(beamState.hop(PAU1), 86_400, "hop should be set for PAU1");
+        assertEq(beamState.getHop(PAU1), 86_400, "getHop should return correct value");
     }
 
     function testSetHopGlobal() public {
-        beamState.setHop(address(0), 3600);
-        assertEq(beamState.hop(address(0)), 3600, "global hop should be set");
-        assertEq(beamState.getHop(address(0)), 3600, "getHop should return global value");
+        beamState.setHop(address(0), 3_600);
+        assertEq(beamState.hop(address(0)), 3_600, "global hop should be set");
+        assertEq(beamState.getHop(address(0)), 3_600, "getHop should return global value");
     }
 
     function testGetHopFallback() public {
-        beamState.setHop(address(0), 7200);
+        beamState.setHop(address(0), 7_200);
 
         // PAU1 has no specific hop, should fallback to global
         assertEq(beamState.hop(PAU1), 0, "PAU1 hop storage should be 0");
-        assertEq(beamState.getHop(PAU1), 7200, "getHop should return global fallback");
+        assertEq(beamState.getHop(PAU1), 7_200, "getHop should return global fallback");
 
         // Set specific hop for PAU1
-        beamState.setHop(PAU1, 14400);
-        assertEq(beamState.getHop(PAU1), 14400, "getHop should return PAU1 specific value");
+        beamState.setHop(PAU1, 14_400);
+        assertEq(beamState.getHop(PAU1), 14_400, "getHop should return PAU1 specific value");
     }
 
     function testSetHopRoleAuth() public {
@@ -196,9 +196,9 @@ contract BeamStateTest is DssTest {
         beamState.setUserRole(USER1, 1, true);
 
         vm.prank(USER1);
-        beamState.setHop(PAU1, 1000);
+        beamState.setHop(PAU1, 1_000);
 
-        assertEq(beamState.hop(PAU1), 1000, "hop should be set by role user");
+        assertEq(beamState.hop(PAU1), 1_000, "hop should be set by role user");
     }
 
     // --- MaxChange Configuration Tests ---
@@ -357,11 +357,11 @@ contract BeamStateTest is DssTest {
         bytes32 key = keccak256("test-key");
 
         vm.expectEmit();
-        emit AddInitRateLimits(key, PAU1, 1000 * WAD, 10 * WAD);
-        beamState.addInitRateLimits(key, PAU1, 1000 * WAD, 10 * WAD);
+        emit AddInitRateLimits(key, PAU1, 1_000 * WAD, 10 * WAD);
+        beamState.addInitRateLimits(key, PAU1, 1_000 * WAD, 10 * WAD);
 
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, PAU1);
-        assertEq(limits.maxAmount, 1000 * WAD, "maxAmount should be set");
+        assertEq(limits.maxAmount, 1_000 * WAD, "maxAmount should be set");
         assertEq(limits.slope, 10 * WAD, "slope should be set");
     }
 
@@ -416,18 +416,18 @@ contract BeamStateTest is DssTest {
         beamState.setUserRole(USER1, 5, true);
 
         vm.prank(USER1);
-        beamState.addInitRateLimits(key, PAU1, 1000 * WAD, 10 * WAD);
+        beamState.addInitRateLimits(key, PAU1, 1_000 * WAD, 10 * WAD);
 
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, PAU1);
-        assertEq(limits.maxAmount, 1000 * WAD, "maxAmount should be set by role user");
+        assertEq(limits.maxAmount, 1_000 * WAD, "maxAmount should be set by role user");
     }
 
     function testDelInitRateLimits() public {
         bytes32 key = keccak256("del-key");
 
-        beamState.addInitRateLimits(key, PAU1, 1000 * WAD, 10 * WAD);
+        beamState.addInitRateLimits(key, PAU1, 1_000 * WAD, 10 * WAD);
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, PAU1);
-        assertEq(limits.maxAmount, 1000 * WAD, "maxAmount should be set");
+        assertEq(limits.maxAmount, 1_000 * WAD, "maxAmount should be set");
 
         vm.expectEmit();
         emit DelInitRateLimits(key, PAU1);
@@ -440,7 +440,7 @@ contract BeamStateTest is DssTest {
 
     function testDelInitRateLimitsRoleAuth() public {
         bytes32 key = keccak256("del-auth-key");
-        beamState.addInitRateLimits(key, PAU1, 1000 * WAD, 10 * WAD);
+        beamState.addInitRateLimits(key, PAU1, 1_000 * WAD, 10 * WAD);
 
         beamState.setRoleAction(5, beamState.delInitRateLimits.selector, true);
         beamState.setUserRole(USER1, 5, true);
@@ -561,8 +561,8 @@ contract BeamStateTest is DssTest {
 
         // USER1 sets hop
         vm.prank(USER1);
-        beamState.setHop(PAU1, 3600);
-        assertEq(beamState.hop(PAU1), 3600, "USER1 should be able to set hop");
+        beamState.setHop(PAU1, 3_600);
+        assertEq(beamState.hop(PAU1), 3_600, "USER1 should be able to set hop");
 
         // USER2 adds cBeam
         vm.prank(USER2);
@@ -577,9 +577,9 @@ contract BeamStateTest is DssTest {
         // USER2 adds rate limits
         bytes32 key = keccak256("integration-key");
         vm.prank(USER2);
-        beamState.addInitRateLimits(key, PAU1, 1000 * WAD, 10 * WAD);
+        beamState.addInitRateLimits(key, PAU1, 1_000 * WAD, 10 * WAD);
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, PAU1);
-        assertEq(limits.maxAmount, 1000 * WAD, "USER2 should be able to add rate limits");
+        assertEq(limits.maxAmount, 1_000 * WAD, "USER2 should be able to add rate limits");
 
         // USER1 cannot add cBeam (wrong role)
         vm.prank(USER1);
@@ -591,16 +591,16 @@ contract BeamStateTest is DssTest {
         bytes32 key = keccak256("multi-pau-key");
 
         // Configure different settings for different PAUs
-        beamState.setHop(PAU1, 1000);
-        beamState.setHop(PAU2, 2000);
+        beamState.setHop(PAU1, 1_000);
+        beamState.setHop(PAU2, 2_000);
         beamState.setMaxChange(PAU1, 2 * WAD);
         beamState.setMaxChange(PAU2, 3 * WAD);
         beamState.addInitRateLimits(key, PAU1, 100 * WAD, 1 * WAD);
         beamState.addInitRateLimits(key, PAU2, 200 * WAD, 2 * WAD);
 
         // Verify each PAU has its own configuration
-        assertEq(beamState.getHop(PAU1), 1000, "PAU1 hop should be 1000");
-        assertEq(beamState.getHop(PAU2), 2000, "PAU2 hop should be 2000");
+        assertEq(beamState.getHop(PAU1), 1_000, "PAU1 hop should be 1_000");
+        assertEq(beamState.getHop(PAU2), 2_000, "PAU2 hop should be 2_000");
         assertEq(beamState.getMaxChange(PAU1), 2 * WAD, "PAU1 maxChange should be 2x");
         assertEq(beamState.getMaxChange(PAU2), 3 * WAD, "PAU2 maxChange should be 3x");
 
