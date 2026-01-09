@@ -67,6 +67,7 @@ contract ConfiguratorTest is DssTest {
     address constant USER1 = address(0x1);
 
     event SetRateLimit(address indexed target, bytes32 indexed key, uint256 maxAmount, uint256 slope);
+    event CallControllerAction(address indexed controller, bytes data);
 
     function setUp() public {
         beamState = new BeamState();
@@ -489,6 +490,8 @@ contract ConfiguratorTest is DssTest {
         beamState.addInitControllerActions(data, address(target1));
 
         vm.prank(CBEAM1);
+        vm.expectEmit();
+        emit CallControllerAction(address(target1), data);
         bytes memory ret = configurator.callControllerAction(address(target1), data);
 
         uint256 result = abi.decode(ret, (uint256));
@@ -527,10 +530,14 @@ contract ConfiguratorTest is DssTest {
 
         // Should work for any TARGET
         vm.prank(CBEAM1);
+        vm.expectEmit();
+        emit CallControllerAction(address(target1), data);
         bytes memory ret1 = configurator.callControllerAction(address(target1), data);
         assertEq(abi.decode(ret1, (uint256)), 200, "should work with global whitelist for target1");
 
         vm.prank(CBEAM1);
+        vm.expectEmit();
+        emit CallControllerAction(address(target2), data);
         bytes memory ret2 = configurator.callControllerAction(address(target2), data);
         assertEq(abi.decode(ret2, (uint256)), 200, "should work with global whitelist for target2");
     }
@@ -554,6 +561,8 @@ contract ConfiguratorTest is DssTest {
         beamState.addInitControllerActions(data, address(target1));
 
         vm.prank(CBEAM1);
+        vm.expectEmit();
+        emit CallControllerAction(address(target1), data);
         configurator.callControllerAction(address(target1), data);
 
         assertEq(target1.lastCallData(), data, "arbitrary data should be passed correctly");

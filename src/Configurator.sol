@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
+interface BeamStateLike {
+    function getHop(address) external view returns (uint256);
+    function getMaxChange(address) external view returns (uint256);
+    function controllersCBeams(address, address) external view returns (uint256);
+    function rateLimitsCBeams(address, address) external view returns (uint256);
+    function getInitRateLimits(bytes32, address) external view returns (uint256, uint256);
+    function isControllerActionEnabled(bytes32, address) external view returns (bool);
+}
+
 interface RateLimitsLike {
     struct RateLimitData {
         uint256 maxAmount;
@@ -13,15 +22,6 @@ interface RateLimitsLike {
     function getCurrentRateLimit(bytes32) external view returns (uint256);
     function setRateLimitData(bytes32, uint256, uint256, uint256, uint256) external;
     function setUnlimitedRateLimitData(bytes32) external;
-}
-
-interface BeamStateLike {
-    function getHop(address) external view returns (uint256);
-    function getMaxChange(address) external view returns (uint256);
-    function controllersCBeams(address, address) external view returns (uint256);
-    function rateLimitsCBeams(address, address) external view returns (uint256);
-    function getInitRateLimits(bytes32, address) external view returns (uint256, uint256);
-    function isControllerActionEnabled(bytes32, address) external view returns (bool);
 }
 
 contract Configurator {
@@ -41,6 +41,7 @@ contract Configurator {
     // --- Events ---
 
     event SetRateLimit(address indexed rateLimits, bytes32 indexed key, uint256 maxAmount, uint256 slope);
+    event CallControllerAction(address indexed controller, bytes data);
 
     // --- Modifiers ---
 
@@ -94,5 +95,6 @@ contract Configurator {
         bool ok;
         (ok, ret) = controller.call(data);
         require(ok, "Configurator/call-failed");
+        emit CallControllerAction(controller, data);
     }
 }
