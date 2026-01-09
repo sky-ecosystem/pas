@@ -341,8 +341,8 @@ contract ConfiguratorTest is DssTest {
     function testSetUnlimitedRateLimit() public {
         bytes32 key = keccak256("unlimited-key");
         _setupCBeam(address(pau1), CBEAM1);
-        // Must set at global level due to getInitRateLimits fallback logic when slope == 0
-        _setupDefaultRateLimits(key, address(0), type(uint256).max, 0);
+        // Set unlimited for specific PAU
+        _setupDefaultRateLimits(key, address(pau1), type(uint256).max, 0);
         _setupRateLimitData(pau1, key, 1_000 * WAD, 10 * WAD, 1_000 * WAD, block.timestamp);
 
         vm.prank(CBEAM1);
@@ -360,8 +360,8 @@ contract ConfiguratorTest is DssTest {
         _setupCBeam(address(pau1), CBEAM1);
         _setupRateLimitData(pau1, key, 1_000 * WAD, 10 * WAD, 1_000 * WAD, block.timestamp);
 
-        // Set defaults that allow unlimited (must be at global level due to fallback logic)
-        _setupDefaultRateLimits(key, address(0), type(uint256).max, 0);
+        // Set defaults that allow unlimited for specific PAU
+        _setupDefaultRateLimits(key, address(pau1), type(uint256).max, 0);
 
         // Any value passed should result in unlimited due to special unlimited check
         vm.prank(CBEAM1);

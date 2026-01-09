@@ -401,13 +401,19 @@ contract BeamStateTest is DssTest {
         // Set global default
         beamState.addInitRateLimits(key, address(0), 100 * WAD, 1 * WAD);
 
-        // Set only maxAmount for PAU1
+        // Set specific values for PAU1 (with slope = 0 for unlimited)
         beamState.addInitRateLimits(key, PAU1, 200 * WAD, 0);
 
-        // Should fallback to global because slope is 0
+        // Should NOT fallback because maxAmount is non-zero (only falls back when BOTH are 0)
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, PAU1);
-        assertEq(limits.maxAmount, 100 * WAD, "should fallback to global maxAmount");
-        assertEq(limits.slope, 1 * WAD, "should fallback to global slope");
+        assertEq(limits.maxAmount, 200 * WAD, "should return PAU1 specific maxAmount");
+        assertEq(limits.slope, 0, "should return PAU1 specific slope (unlimited)");
+
+        // Test that fallback only happens when BOTH are zero
+        beamState.addInitRateLimits(key, PAU2, 0, 0);
+        limits = beamState.getInitRateLimits(key, PAU2);
+        assertEq(limits.maxAmount, 100 * WAD, "should fallback to global when both are 0");
+        assertEq(limits.slope, 1 * WAD, "should fallback to global when both are 0");
     }
 
     function testAddInitRateLimitsRoleAuth() public {
@@ -613,19 +619,19 @@ contract BeamStateTest is DssTest {
     function testUnlimitedRateLimitConfiguration() public {
         bytes32 key = keccak256("unlimited-key");
 
-        // Set unlimited as global default first (since getInitRateLimits has fallback logic for slope == 0)
+        // Set unlimited as global default
         beamState.addInitRateLimits(key, address(0), type(uint256).max, 0);
 
-        // Now set for specific PAU
-        beamState.addInitRateLimits(key, PAU1, type(uint256).max, 1);
+        // Now set unlimited for specific PAU (this now works with the fix!)
+        beamState.addInitRateLimits(key, PAU1, type(uint256).max, 0);
 
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, PAU1);
-        assertEq(limits.maxAmount, type(uint256).max, "maxAmount should be unlimited");
-        assertEq(limits.slope, 1, "slope should be 1");
+        assertEq(limits.maxAmount, type(uint256).max, "PAU1 maxAmount should be unlimited");
+        assertEq(limits.slope, 0, "PAU1 slope should be 0 for unlimited");
 
-        // Test that global unlimited also works
+        // Test that global unlimited also works for PAU2 (fallback)
         limits = beamState.getInitRateLimits(key, PAU2);
-        assertEq(limits.maxAmount, type(uint256).max, "global maxAmount should be unlimited");
-        assertEq(limits.slope, 0, "global slope should be 0 for unlimited");
+        assertEq(limits.maxAmount, type(uint256).max, "PAU2 should fallback to global unlimited maxAmount");
+        assertEq(limits.slope, 0, "PAU2 should fallback to global slope of 0 for unlimited");
     }
 }
