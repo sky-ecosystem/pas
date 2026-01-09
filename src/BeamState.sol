@@ -5,15 +5,16 @@ contract BeamState {
 
     // --- Storage variables ---
 
-    mapping(address usr => uint256 allowed)                                 public wards;
-    mapping(address usr => bytes32 rolesData)                               public userRoles;
-    mapping(bytes4  sig => bytes32 rolesData)                               public actionsRoles;
-    mapping(address cBeam => uint256 added)                                 public cBeams;                // allowed == 0 => false, allowed == 1 => true
-    mapping(address pau => mapping(address cBeam => uint256 allowed))       public pauCBeams;             // allowed == 0 => false, allowed == 1 => true
-    mapping(bytes32 key => mapping(address pau => DefaultRateLimits limit)) public initRateLimits;        // pau == address(0) every pau allowed
-    mapping(bytes32 key => mapping(address pau => bool allowed))            public initControllerActions; // pau == address(0) every pau allowed
-    mapping(address pau => uint256 value)                                   public hop;                   // pau == address(0) => general backup configuration
-    mapping(address pau => uint256 value)                                   public maxChange;             // pau == address(0) => general backup configuration
+    mapping(address usr => uint256 allowed)                                        public wards;
+    mapping(address usr => bytes32 rolesData)                                      public userRoles;
+    mapping(bytes4  sig => bytes32 rolesData)                                      public actionsRoles;
+    mapping(address cBeam => uint256 added)                                        public cBeams;                // allowed == 0 => false, allowed == 1 => true
+    mapping(address controller => mapping(address cBeam => uint256 allowed))       public controllersCBeams;     // allowed == 0 => false, allowed == 1 => true
+    mapping(address rateLimits => mapping(address cBeam => uint256 allowed))       public rateLimitsCBeams;      // allowed == 0 => false, allowed == 1 => true
+    mapping(bytes32 key => mapping(address rateLimits => DefaultRateLimits limit)) public initRateLimits;        // rateLimits == address(0) every rateLimits allowed
+    mapping(bytes32 key => mapping(address rateLimits => bool allowed))            public initControllerActions; // rateLimits == address(0) every rateLimits allowed
+    mapping(address rateLimits => uint256 value)                                   public hop;                   // rateLimits == address(0) => general backup configuration
+    mapping(address rateLimits => uint256 value)                                   public maxChange;             // rateLimits == address(0) => general backup configuration
 
     struct DefaultRateLimits {
         uint256 maxAmount;
@@ -30,16 +31,18 @@ contract BeamState {
     event Deny(address indexed usr);
     event SetUserRole(address indexed who, uint8 indexed role, bool enabled);
     event SetRoleAction(uint8 indexed role, bytes4 sig, bool enabled);
-    event SetHop(address indexed pau, uint256 value);
-    event SetMaxChange(address indexed pau, uint256 value);
+    event SetHop(address indexed rateLimits, uint256 value);
+    event SetMaxChange(address indexed rateLimits, uint256 value);
     event AddCBeam(address indexed cBeam);
     event DelCBeam(address indexed cBeam);
-    event SetCBeamForPau(address indexed pau, address indexed cBeam);
-    event UnsetCBeamForPau(address indexed pau, address indexed cBeam);
-    event AddInitRateLimits(bytes32 indexed key, address indexed pau, uint256 maxAmount, uint256 slope);
-    event DelInitRateLimits(bytes32 indexed key, address indexed pau);
-    event AddInitControllerActions(bytes32 indexed key, address indexed pau);
-    event DelInitControllerActions(bytes32 indexed key, address indexed pau);
+    event SetCBeamForController(address indexed controller, address indexed cBeam);
+    event UnsetCBeamForController(address indexed controller, address indexed cBeam);
+    event SetCBeamForRateLimits(address indexed rateLimits, address indexed cBeam);
+    event UnsetCBeamForRateLimits(address indexed rateLimits, address indexed cBeam);
+    event AddInitRateLimits(bytes32 indexed key, address indexed rateLimits, uint256 maxAmount, uint256 slope);
+    event DelInitRateLimits(bytes32 indexed key, address indexed rateLimits);
+    event AddInitControllerActions(bytes32 indexed key, address indexed rateLimits);
+    event DelInitControllerActions(bytes32 indexed key, address indexed rateLimits);
 
     // --- Modifiers ---
 
@@ -73,25 +76,25 @@ contract BeamState {
         has = actionsRoles[sig] & bytes32(uint256(1) << role) != bytes32(0);
     }
 
-    function getHop(address pau) external view returns (uint256 hop_) {
-        hop_ = hop[pau]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
+    function getHop(address rateLimits) external view returns (uint256 hop_) {
+        hop_ = hop[rateLimits]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
     }
 
-    function getMaxChange(address pau) external view returns (uint256 maxChange_) {
-        maxChange_ = maxChange[pau]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
+    function getMaxChange(address rateLimits) external view returns (uint256 maxChange_) {
+        maxChange_ = maxChange[rateLimits]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
     }
 
-    function getInitRateLimits(bytes32 key, address pau) external view returns (DefaultRateLimits memory defaultRateLimits) {
-        defaultRateLimits = initRateLimits[key][pau];
+    function getInitRateLimits(bytes32 key, address rateLimits) external view returns (DefaultRateLimits memory defaultRateLimits) {
+        defaultRateLimits = initRateLimits[key][rateLimits];
         if (defaultRateLimits.maxAmount == 0 && defaultRateLimits.slope == 0) {
-            // If not set for specific pau, check in general
+            // If not set for specific rateLimits, check in general
             defaultRateLimits = initRateLimits[key][address(0)];
         }
     }
 
-    function isControllerActionEnabled(bytes32 key, address pau) external view returns (bool ok) {
-        ok = initControllerActions[key][address(0)] || // address(0) enabled for every pau
-             initControllerActions[key][pau];
+    function isControllerActionEnabled(bytes32 key, address controller) external view returns (bool ok) {
+        ok = initControllerActions[key][address(0)] || // address(0) enabled for every controller
+             initControllerActions[key][controller];
     }
 
     // --- Admin functions ---
@@ -128,15 +131,15 @@ contract BeamState {
 
     // --- Role authed functions ---
 
-    function setHop(address pau, uint256 value) external roleAuth {
-        hop[pau] = value;
-        emit SetHop(pau, value);
+    function setHop(address rateLimits, uint256 value) external roleAuth {
+        hop[rateLimits] = value;
+        emit SetHop(rateLimits, value);
     }
 
-    function setMaxChange(address pau, uint256 value) external roleAuth {
+    function setMaxChange(address rateLimits, uint256 value) external roleAuth {
         require(value >= WAD, "Configurator/maxChange-below-1x");
-        maxChange[pau] = value;
-        emit SetMaxChange(pau, value);
+        maxChange[rateLimits] = value;
+        emit SetMaxChange(rateLimits, value);
     }
 
     function addCBeam(address cBeam) external roleAuth {
@@ -149,35 +152,46 @@ contract BeamState {
         emit DelCBeam(cBeam);
     }
 
-    function setCBeamForPau(address pau, address cBeam) external roleAuth {
+    function setCBeamForController(address controller, address cBeam) external roleAuth {
         require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
-        pauCBeams[pau][cBeam] = 1;
-        emit SetCBeamForPau(pau, cBeam);
+        controllersCBeams[controller][cBeam] = 1;
+        emit SetCBeamForController(controller, cBeam);
     }
 
-    function unsetCBeamForPau(address pau, address cBeam) external roleAuth {
-        pauCBeams[pau][cBeam] = 0;
-        emit UnsetCBeamForPau(pau, cBeam);
+    function unsetCBeamForController(address controller, address cBeam) external roleAuth {
+        controllersCBeams[controller][cBeam] = 0;
+        emit UnsetCBeamForController(controller, cBeam);
     }
 
-    function addInitRateLimits(bytes32 key, address pau, uint256 maxAmount, uint256 slope) external roleAuth {
-        initRateLimits[key][pau] = DefaultRateLimits(maxAmount, slope);
-        emit AddInitRateLimits(key, pau, maxAmount, slope);
+    function setCBeamForRateLimits(address rateLimits, address cBeam) external roleAuth {
+        require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
+        rateLimitsCBeams[rateLimits][cBeam] = 1;
+        emit SetCBeamForRateLimits(rateLimits, cBeam);
     }
 
-    function delInitRateLimits(bytes32 key, address pau) external roleAuth {
-        delete initRateLimits[key][pau];
-        emit DelInitRateLimits(key, pau);
+    function unsetCBeamForRateLimits(address rateLimits, address cBeam) external roleAuth {
+        rateLimitsCBeams[rateLimits][cBeam] = 0;
+        emit UnsetCBeamForRateLimits(rateLimits, cBeam);
     }
 
-    function addInitControllerActions(bytes calldata data, address pau) external roleAuth returns (bytes32 key) {
+    function addInitRateLimits(bytes32 key, address rateLimits, uint256 maxAmount, uint256 slope) external roleAuth {
+        initRateLimits[key][rateLimits] = DefaultRateLimits(maxAmount, slope);
+        emit AddInitRateLimits(key, rateLimits, maxAmount, slope);
+    }
+
+    function delInitRateLimits(bytes32 key, address rateLimits) external roleAuth {
+        delete initRateLimits[key][rateLimits];
+        emit DelInitRateLimits(key, rateLimits);
+    }
+
+    function addInitControllerActions(bytes calldata data, address controller) external roleAuth returns (bytes32 key) {
         key = keccak256(data);
-        initControllerActions[key][pau] = true;
-        emit AddInitControllerActions(key, pau);
+        initControllerActions[key][controller] = true;
+        emit AddInitControllerActions(key, controller);
     }
 
-    function delInitControllerActions(bytes32 key, address pau) external roleAuth {
-        delete initControllerActions[key][pau];
-        emit DelInitControllerActions(key, pau);
+    function delInitControllerActions(bytes32 key, address controller) external roleAuth {
+        delete initControllerActions[key][controller];
+        emit DelInitControllerActions(key, controller);
     }
 }
