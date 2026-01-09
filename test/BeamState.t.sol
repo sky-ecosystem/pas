@@ -297,62 +297,6 @@ contract BeamStateTest is DssTest {
         assertEq(beamState.cBeams(CBEAM1), 0, "CBEAM1 should be deleted by role user");
     }
 
-    // --- cBeam-Controller Mapping Tests ---
-
-    function testSetCBeamForController() public {
-        beamState.addCBeam(CBEAM1);
-
-        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 0, "CBEAM1 should not be authorized for TARGET1 initially");
-
-        vm.expectEmit();
-        emit SetCBeamForController(TARGET1, CBEAM1);
-        beamState.setCBeamForController(TARGET1, CBEAM1);
-
-        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 1, "CBEAM1 should be authorized for TARGET1");
-    }
-
-    function testSetCBeamForControllerNotExisting() public {
-        vm.expectRevert("BeamState/not-existing-cBeam");
-        beamState.setCBeamForController(TARGET1, CBEAM1);
-    }
-
-    function testSetCBeamForControllerRoleAuth() public {
-        beamState.addCBeam(CBEAM1);
-
-        beamState.setRoleAction(4, beamState.setCBeamForController.selector, true);
-        beamState.setUserRole(USER1, 4, true);
-
-        vm.prank(USER1);
-        beamState.setCBeamForController(TARGET1, CBEAM1);
-
-        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 1, "CBEAM1 should be set for TARGET1 by role user");
-    }
-
-    function testUnsetCBeamForController() public {
-        beamState.addCBeam(CBEAM1);
-        beamState.setCBeamForController(TARGET1, CBEAM1);
-        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 1, "CBEAM1 should be authorized for TARGET1");
-
-        vm.expectEmit();
-        emit UnsetCBeamForController(TARGET1, CBEAM1);
-        beamState.unsetCBeamForController(TARGET1, CBEAM1);
-
-        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 0, "CBEAM1 should not be authorized for TARGET1 after unset");
-    }
-
-    function testUnsetCBeamForControllerRoleAuth() public {
-        beamState.addCBeam(CBEAM1);
-        beamState.setCBeamForController(TARGET1, CBEAM1);
-
-        beamState.setRoleAction(4, beamState.unsetCBeamForController.selector, true);
-        beamState.setUserRole(USER1, 4, true);
-
-        vm.prank(USER1);
-        beamState.unsetCBeamForController(TARGET1, CBEAM1);
-
-        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 0, "CBEAM1 should be unset for TARGET1 by role user");
-    }
-
     // --- cBeam-RateLimits Mapping Tests ---
 
     function testSetCBeamForRateLimits() public {
@@ -407,6 +351,62 @@ contract BeamStateTest is DssTest {
         beamState.unsetCBeamForRateLimits(TARGET1, CBEAM1);
 
         assertEq(beamState.rateLimitsCBeams(TARGET1, CBEAM1), 0, "CBEAM1 should be unset for TARGET1 by role user");
+    }
+
+    // --- cBeam-Controller Mapping Tests ---
+
+    function testSetCBeamForController() public {
+        beamState.addCBeam(CBEAM1);
+
+        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 0, "CBEAM1 should not be authorized for TARGET1 initially");
+
+        vm.expectEmit();
+        emit SetCBeamForController(TARGET1, CBEAM1);
+        beamState.setCBeamForController(TARGET1, CBEAM1);
+
+        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 1, "CBEAM1 should be authorized for TARGET1");
+    }
+
+    function testSetCBeamForControllerNotExisting() public {
+        vm.expectRevert("BeamState/not-existing-cBeam");
+        beamState.setCBeamForController(TARGET1, CBEAM1);
+    }
+
+    function testSetCBeamForControllerRoleAuth() public {
+        beamState.addCBeam(CBEAM1);
+
+        beamState.setRoleAction(4, beamState.setCBeamForController.selector, true);
+        beamState.setUserRole(USER1, 4, true);
+
+        vm.prank(USER1);
+        beamState.setCBeamForController(TARGET1, CBEAM1);
+
+        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 1, "CBEAM1 should be set for TARGET1 by role user");
+    }
+
+    function testUnsetCBeamForController() public {
+        beamState.addCBeam(CBEAM1);
+        beamState.setCBeamForController(TARGET1, CBEAM1);
+        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 1, "CBEAM1 should be authorized for TARGET1");
+
+        vm.expectEmit();
+        emit UnsetCBeamForController(TARGET1, CBEAM1);
+        beamState.unsetCBeamForController(TARGET1, CBEAM1);
+
+        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 0, "CBEAM1 should not be authorized for TARGET1 after unset");
+    }
+
+    function testUnsetCBeamForControllerRoleAuth() public {
+        beamState.addCBeam(CBEAM1);
+        beamState.setCBeamForController(TARGET1, CBEAM1);
+
+        beamState.setRoleAction(4, beamState.unsetCBeamForController.selector, true);
+        beamState.setUserRole(USER1, 4, true);
+
+        vm.prank(USER1);
+        beamState.unsetCBeamForController(TARGET1, CBEAM1);
+
+        assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 0, "CBEAM1 should be unset for TARGET1 by role user");
     }
 
     // --- Rate Limits Tests ---

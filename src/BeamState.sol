@@ -152,17 +152,6 @@ contract BeamState {
         emit DelCBeam(cBeam);
     }
 
-    function setCBeamForController(address controller, address cBeam) external roleAuth {
-        require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
-        controllersCBeams[controller][cBeam] = 1;
-        emit SetCBeamForController(controller, cBeam);
-    }
-
-    function unsetCBeamForController(address controller, address cBeam) external roleAuth {
-        controllersCBeams[controller][cBeam] = 0;
-        emit UnsetCBeamForController(controller, cBeam);
-    }
-
     function setCBeamForRateLimits(address rateLimits, address cBeam) external roleAuth {
         require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
         rateLimitsCBeams[rateLimits][cBeam] = 1;
@@ -172,6 +161,17 @@ contract BeamState {
     function unsetCBeamForRateLimits(address rateLimits, address cBeam) external roleAuth {
         rateLimitsCBeams[rateLimits][cBeam] = 0;
         emit UnsetCBeamForRateLimits(rateLimits, cBeam);
+    }
+
+    function setCBeamForController(address controller, address cBeam) external roleAuth {
+        require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
+        controllersCBeams[controller][cBeam] = 1;
+        emit SetCBeamForController(controller, cBeam);
+    }
+
+    function unsetCBeamForController(address controller, address cBeam) external roleAuth {
+        controllersCBeams[controller][cBeam] = 0;
+        emit UnsetCBeamForController(controller, cBeam);
     }
 
     function addInitRateLimits(bytes32 key, address rateLimits, uint256 maxAmount, uint256 slope) external roleAuth {
