@@ -90,6 +90,8 @@ contract ConfiguratorTest is DssTest {
     // --- Helper Functions ---
 
     function _setupCBeam(address target, address cBeam) internal {
+        beamState.addController(target);
+        beamState.addRateLimits(target);
         beamState.addCBeam(cBeam);
         beamState.setCBeamForController(target, cBeam);
         beamState.setCBeamForRateLimits(target, cBeam);

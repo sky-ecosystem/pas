@@ -19,6 +19,10 @@ contract BeamStateTest is DssTest {
     event SetRoleAction(uint8 indexed role, bytes4 sig, bool enabled);
     event SetHop(address indexed rateLimits, uint256 value);
     event SetMaxChange(address indexed rateLimits, uint256 value);
+    event AddRateLimits(address indexed rateLimits_);
+    event DelRateLimits(address indexed rateLimits_);
+    event AddController(address indexed controller);
+    event DelController(address indexed controller);
     event AddCBeam(address indexed cBeam);
     event DelCBeam(address indexed cBeam);
     event SetCBeamForController(address indexed controller, address indexed cBeam);
@@ -297,9 +301,116 @@ contract BeamStateTest is DssTest {
         assertEq(beamState.cBeams(CBEAM1), 0, "CBEAM1 should be deleted by role user");
     }
 
+    // --- RateLimits Management Tests ---
+
+    function testAddRateLimits() public {
+        assertEq(beamState.rateLimits(TARGET1), 0, "TARGET1 should not be registered initially");
+
+        vm.expectEmit();
+        emit AddRateLimits(TARGET1);
+        beamState.addRateLimits(TARGET1);
+
+        assertEq(beamState.rateLimits(TARGET1), 1, "TARGET1 should be registered");
+    }
+
+    function testAddRateLimitsRoleAuth() public {
+        beamState.setRoleAction(8, beamState.addRateLimits.selector, true);
+        beamState.setUserRole(USER1, 8, true);
+
+        vm.prank(USER1);
+        beamState.addRateLimits(TARGET1);
+
+        assertEq(beamState.rateLimits(TARGET1), 1, "TARGET1 should be registered by role user");
+    }
+
+    function testDelRateLimits() public {
+        beamState.addRateLimits(TARGET1);
+        assertEq(beamState.rateLimits(TARGET1), 1, "TARGET1 should be registered");
+
+        vm.expectEmit();
+        emit DelRateLimits(TARGET1);
+        beamState.delRateLimits(TARGET1);
+
+        assertEq(beamState.rateLimits(TARGET1), 0, "TARGET1 should not be registered after delete");
+    }
+
+    function testDelRateLimitsRoleAuth() public {
+        beamState.addRateLimits(TARGET1);
+
+        beamState.setRoleAction(8, beamState.delRateLimits.selector, true);
+        beamState.setUserRole(USER1, 8, true);
+
+        vm.prank(USER1);
+        beamState.delRateLimits(TARGET1);
+
+        assertEq(beamState.rateLimits(TARGET1), 0, "TARGET1 should be deleted by role user");
+    }
+
+    function testAddRateLimitsMultiple() public {
+        beamState.addRateLimits(TARGET1);
+        beamState.addRateLimits(TARGET2);
+
+        assertEq(beamState.rateLimits(TARGET1), 1, "TARGET1 should be registered");
+        assertEq(beamState.rateLimits(TARGET2), 1, "TARGET2 should be registered");
+    }
+
+    // --- Controller Management Tests ---
+
+    function testAddController() public {
+        assertEq(beamState.controllers(TARGET1), 0, "TARGET1 should not be registered initially");
+
+        vm.expectEmit();
+        emit AddController(TARGET1);
+        beamState.addController(TARGET1);
+
+        assertEq(beamState.controllers(TARGET1), 1, "TARGET1 should be registered");
+    }
+
+    function testAddControllerRoleAuth() public {
+        beamState.setRoleAction(9, beamState.addController.selector, true);
+        beamState.setUserRole(USER1, 9, true);
+
+        vm.prank(USER1);
+        beamState.addController(TARGET1);
+
+        assertEq(beamState.controllers(TARGET1), 1, "TARGET1 should be registered by role user");
+    }
+
+    function testDelController() public {
+        beamState.addController(TARGET1);
+        assertEq(beamState.controllers(TARGET1), 1, "TARGET1 should be registered");
+
+        vm.expectEmit();
+        emit DelController(TARGET1);
+        beamState.delController(TARGET1);
+
+        assertEq(beamState.controllers(TARGET1), 0, "TARGET1 should not be registered after delete");
+    }
+
+    function testDelControllerRoleAuth() public {
+        beamState.addController(TARGET1);
+
+        beamState.setRoleAction(9, beamState.delController.selector, true);
+        beamState.setUserRole(USER1, 9, true);
+
+        vm.prank(USER1);
+        beamState.delController(TARGET1);
+
+        assertEq(beamState.controllers(TARGET1), 0, "TARGET1 should be deleted by role user");
+    }
+
+    function testAddControllerMultiple() public {
+        beamState.addController(TARGET1);
+        beamState.addController(TARGET2);
+
+        assertEq(beamState.controllers(TARGET1), 1, "TARGET1 should be registered");
+        assertEq(beamState.controllers(TARGET2), 1, "TARGET2 should be registered");
+    }
+
     // --- cBeam-RateLimits Mapping Tests ---
 
     function testSetCBeamForRateLimits() public {
+        beamState.addRateLimits(TARGET1);
         beamState.addCBeam(CBEAM1);
 
         assertEq(beamState.rateLimitsCBeams(TARGET1, CBEAM1), 0, "CBEAM1 should not be authorized for TARGET1 initially");
@@ -312,11 +423,18 @@ contract BeamStateTest is DssTest {
     }
 
     function testSetCBeamForRateLimitsNotExisting() public {
+        // Test when rateLimits not registered
+        vm.expectRevert("BeamState/not-existing-rateLimits");
+        beamState.setCBeamForRateLimits(TARGET1, CBEAM1);
+
+        // Test when rateLimits registered but cBeam not registered
+        beamState.addRateLimits(TARGET1);
         vm.expectRevert("BeamState/not-existing-cBeam");
         beamState.setCBeamForRateLimits(TARGET1, CBEAM1);
     }
 
     function testSetCBeamForRateLimitsRoleAuth() public {
+        beamState.addRateLimits(TARGET1);
         beamState.addCBeam(CBEAM1);
 
         beamState.setRoleAction(4, beamState.setCBeamForRateLimits.selector, true);
@@ -329,6 +447,7 @@ contract BeamStateTest is DssTest {
     }
 
     function testUnsetCBeamForRateLimits() public {
+        beamState.addRateLimits(TARGET1);
         beamState.addCBeam(CBEAM1);
         beamState.setCBeamForRateLimits(TARGET1, CBEAM1);
         assertEq(beamState.rateLimitsCBeams(TARGET1, CBEAM1), 1, "CBEAM1 should be authorized for TARGET1");
@@ -341,6 +460,7 @@ contract BeamStateTest is DssTest {
     }
 
     function testUnsetCBeamForRateLimitsRoleAuth() public {
+        beamState.addRateLimits(TARGET1);
         beamState.addCBeam(CBEAM1);
         beamState.setCBeamForRateLimits(TARGET1, CBEAM1);
 
@@ -356,6 +476,7 @@ contract BeamStateTest is DssTest {
     // --- cBeam-Controller Mapping Tests ---
 
     function testSetCBeamForController() public {
+        beamState.addController(TARGET1);
         beamState.addCBeam(CBEAM1);
 
         assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 0, "CBEAM1 should not be authorized for TARGET1 initially");
@@ -368,11 +489,18 @@ contract BeamStateTest is DssTest {
     }
 
     function testSetCBeamForControllerNotExisting() public {
+        // Test when controller not registered
+        vm.expectRevert("BeamState/not-existing-controller");
+        beamState.setCBeamForController(TARGET1, CBEAM1);
+
+        // Test when controller registered but cBeam not registered
+        beamState.addController(TARGET1);
         vm.expectRevert("BeamState/not-existing-cBeam");
         beamState.setCBeamForController(TARGET1, CBEAM1);
     }
 
     function testSetCBeamForControllerRoleAuth() public {
+        beamState.addController(TARGET1);
         beamState.addCBeam(CBEAM1);
 
         beamState.setRoleAction(4, beamState.setCBeamForController.selector, true);
@@ -385,6 +513,7 @@ contract BeamStateTest is DssTest {
     }
 
     function testUnsetCBeamForController() public {
+        beamState.addController(TARGET1);
         beamState.addCBeam(CBEAM1);
         beamState.setCBeamForController(TARGET1, CBEAM1);
         assertEq(beamState.controllersCBeams(TARGET1, CBEAM1), 1, "CBEAM1 should be authorized for TARGET1");
@@ -397,6 +526,7 @@ contract BeamStateTest is DssTest {
     }
 
     function testUnsetCBeamForControllerRoleAuth() public {
+        beamState.addController(TARGET1);
         beamState.addCBeam(CBEAM1);
         beamState.setCBeamForController(TARGET1, CBEAM1);
 
@@ -606,17 +736,15 @@ contract BeamStateTest is DssTest {
 
     function testFullRoleBasedWorkflow() public {
         // Setup: Create roles for different operations
-        bytes4 hopSig = beamState.setHop.selector;
-        bytes4 cBeamSig = beamState.addCBeam.selector;
-        bytes4 limitsSig = beamState.addInitRateLimits.selector;
 
         // Role 1: Can set hop
-        beamState.setRoleAction(1, hopSig, true);
-        // Role 2: Can manage cBeams
-        beamState.setRoleAction(2, cBeamSig, true);
+        beamState.setRoleAction(1, beamState.setHop.selector, true);
+        // Role 2: Can manage cBeams and rateLimits
+        beamState.setRoleAction(2, beamState.addCBeam.selector, true);
+        beamState.setRoleAction(2, beamState.addRateLimits.selector, true);
         beamState.setRoleAction(2, beamState.setCBeamForRateLimits.selector, true);
         // Role 3: Can set rate limits
-        beamState.setRoleAction(3, limitsSig, true);
+        beamState.setRoleAction(3, beamState.addInitRateLimits.selector, true);
 
         // Assign roles to users
         beamState.setUserRole(USER1, 1, true);
@@ -632,6 +760,11 @@ contract BeamStateTest is DssTest {
         vm.prank(USER2);
         beamState.addCBeam(CBEAM1);
         assertEq(beamState.cBeams(CBEAM1), 1, "USER2 should be able to add cBeam");
+
+        // USER2 adds rateLimits
+        vm.prank(USER2);
+        beamState.addRateLimits(TARGET1);
+        assertEq(beamState.rateLimits(TARGET1), 1, "USER2 should be able to add rateLimits");
 
         // USER2 sets cBeam for rateLimits
         vm.prank(USER2);

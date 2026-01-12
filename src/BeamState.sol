@@ -5,16 +5,18 @@ contract BeamState {
 
     // --- Storage variables ---
 
-    mapping(address usr => uint256 allowed)                                        public wards;
-    mapping(address usr => bytes32 rolesData)                                      public userRoles;
-    mapping(bytes4  sig => bytes32 rolesData)                                      public actionsRoles;
-    mapping(address cBeam => uint256 added)                                        public cBeams;                // allowed == 0 => false, allowed == 1 => true
-    mapping(address controller => mapping(address cBeam => uint256 allowed))       public controllersCBeams;     // allowed == 0 => false, allowed == 1 => true
-    mapping(address rateLimits => mapping(address cBeam => uint256 allowed))       public rateLimitsCBeams;      // allowed == 0 => false, allowed == 1 => true
-    mapping(bytes32 key => mapping(address rateLimits => DefaultRateLimits limit)) public initRateLimits;        // rateLimits == address(0) every rateLimits allowed
-    mapping(bytes32 key => mapping(address rateLimits => bool allowed))            public initControllerActions; // rateLimits == address(0) every rateLimits allowed
-    mapping(address rateLimits => uint256 value)                                   public hop;                   // rateLimits == address(0) => general backup configuration
-    mapping(address rateLimits => uint256 value)                                   public maxChange;             // rateLimits == address(0) => general backup configuration
+    mapping(address usr => uint256 allowed)                                         public wards;
+    mapping(address usr => bytes32 rolesData)                                       public userRoles;
+    mapping(bytes4  sig => bytes32 rolesData)                                       public actionsRoles;
+    mapping(address rateLimits_ => uint256 added)                                   public rateLimits;            // allowed == 0 => false, allowed == 1 => true
+    mapping(address controller => uint256 added)                                    public controllers;           // allowed == 0 => false, allowed == 1 => true
+    mapping(address cBeam => uint256 added)                                         public cBeams;                // allowed == 0 => false, allowed == 1 => true
+    mapping(address rateLimits_ => mapping(address cBeam => uint256 allowed))       public rateLimitsCBeams;      // allowed == 0 => false, allowed == 1 => true
+    mapping(address controller => mapping(address cBeam => uint256 allowed))        public controllersCBeams;     // allowed == 0 => false, allowed == 1 => true
+    mapping(bytes32 key => mapping(address rateLimits_ => DefaultRateLimits limit)) public initRateLimits;        // rateLimits == address(0) every rateLimits allowed
+    mapping(bytes32 key => mapping(address rateLimits_ => bool allowed))            public initControllerActions; // rateLimits == address(0) every rateLimits allowed
+    mapping(address rateLimits_ => uint256 value)                                   public hop;                   // rateLimits == address(0) => general backup configuration
+    mapping(address rateLimits_ => uint256 value)                                   public maxChange;             // rateLimits == address(0) => general backup configuration
 
     struct DefaultRateLimits {
         uint256 maxAmount;
@@ -31,18 +33,22 @@ contract BeamState {
     event Deny(address indexed usr);
     event SetUserRole(address indexed who, uint8 indexed role, bool enabled);
     event SetRoleAction(uint8 indexed role, bytes4 sig, bool enabled);
-    event SetHop(address indexed rateLimits, uint256 value);
-    event SetMaxChange(address indexed rateLimits, uint256 value);
+    event SetHop(address indexed rateLimits_, uint256 value);
+    event SetMaxChange(address indexed rateLimits_, uint256 value);
     event AddCBeam(address indexed cBeam);
     event DelCBeam(address indexed cBeam);
+    event AddRateLimits(address indexed rateLimits_);
+    event DelRateLimits(address indexed rateLimits_);
+    event AddController(address indexed controller);
+    event DelController(address indexed controller);
     event SetCBeamForController(address indexed controller, address indexed cBeam);
     event UnsetCBeamForController(address indexed controller, address indexed cBeam);
-    event SetCBeamForRateLimits(address indexed rateLimits, address indexed cBeam);
-    event UnsetCBeamForRateLimits(address indexed rateLimits, address indexed cBeam);
-    event AddInitRateLimits(bytes32 indexed key, address indexed rateLimits, uint256 maxAmount, uint256 slope);
-    event DelInitRateLimits(bytes32 indexed key, address indexed rateLimits);
-    event AddInitControllerActions(bytes32 indexed key, address indexed rateLimits);
-    event DelInitControllerActions(bytes32 indexed key, address indexed rateLimits);
+    event SetCBeamForRateLimits(address indexed rateLimits_, address indexed cBeam);
+    event UnsetCBeamForRateLimits(address indexed rateLimits_, address indexed cBeam);
+    event AddInitRateLimits(bytes32 indexed key, address indexed rateLimits_, uint256 maxAmount, uint256 slope);
+    event DelInitRateLimits(bytes32 indexed key, address indexed rateLimits_);
+    event AddInitControllerActions(bytes32 indexed key, address indexed rateLimits_);
+    event DelInitControllerActions(bytes32 indexed key, address indexed rateLimits_);
 
     // --- Modifiers ---
 
@@ -76,16 +82,16 @@ contract BeamState {
         has = actionsRoles[sig] & bytes32(uint256(1) << role) != bytes32(0);
     }
 
-    function getHop(address rateLimits) external view returns (uint256 hop_) {
-        hop_ = hop[rateLimits]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
+    function getHop(address rateLimits_) external view returns (uint256 hop_) {
+        hop_ = hop[rateLimits_]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
     }
 
-    function getMaxChange(address rateLimits) external view returns (uint256 maxChange_) {
-        maxChange_ = maxChange[rateLimits]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
+    function getMaxChange(address rateLimits_) external view returns (uint256 maxChange_) {
+        maxChange_ = maxChange[rateLimits_]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
     }
 
-    function getInitRateLimits(bytes32 key, address rateLimits) external view returns (DefaultRateLimits memory defaultRateLimits) {
-        defaultRateLimits = initRateLimits[key][rateLimits];
+    function getInitRateLimits(bytes32 key, address rateLimits_) external view returns (DefaultRateLimits memory defaultRateLimits) {
+        defaultRateLimits = initRateLimits[key][rateLimits_];
         if (defaultRateLimits.maxAmount == 0 && defaultRateLimits.slope == 0) {
             // If not set for specific rateLimits, check in general
             defaultRateLimits = initRateLimits[key][address(0)];
@@ -131,15 +137,35 @@ contract BeamState {
 
     // --- Role authed functions ---
 
-    function setHop(address rateLimits, uint256 value) external roleAuth {
-        hop[rateLimits] = value;
-        emit SetHop(rateLimits, value);
+    function setHop(address rateLimits_, uint256 value) external roleAuth {
+        hop[rateLimits_] = value;
+        emit SetHop(rateLimits_, value);
     }
 
-    function setMaxChange(address rateLimits, uint256 value) external roleAuth {
+    function setMaxChange(address rateLimits_, uint256 value) external roleAuth {
         require(value >= WAD, "Configurator/maxChange-below-1x");
-        maxChange[rateLimits] = value;
-        emit SetMaxChange(rateLimits, value);
+        maxChange[rateLimits_] = value;
+        emit SetMaxChange(rateLimits_, value);
+    }
+
+    function addRateLimits(address rateLimits_) external roleAuth {
+        rateLimits[rateLimits_] = 1;
+        emit AddRateLimits(rateLimits_);
+    }
+
+    function delRateLimits(address rateLimits_) external roleAuth {
+        rateLimits[rateLimits_] = 0;
+        emit DelRateLimits(rateLimits_);
+    }
+
+    function addController(address rateLimits_) external roleAuth {
+        controllers[rateLimits_] = 1;
+        emit AddController(rateLimits_);
+    }
+
+    function delController(address controller) external roleAuth {
+        controllers[controller] = 0;
+        emit DelController(controller);
     }
 
     function addCBeam(address cBeam) external roleAuth {
@@ -152,18 +178,20 @@ contract BeamState {
         emit DelCBeam(cBeam);
     }
 
-    function setCBeamForRateLimits(address rateLimits, address cBeam) external roleAuth {
+    function setCBeamForRateLimits(address rateLimits_, address cBeam) external roleAuth {
+        require(rateLimits[rateLimits_] == 1, "BeamState/not-existing-rateLimits");
         require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
-        rateLimitsCBeams[rateLimits][cBeam] = 1;
-        emit SetCBeamForRateLimits(rateLimits, cBeam);
+        rateLimitsCBeams[rateLimits_][cBeam] = 1;
+        emit SetCBeamForRateLimits(rateLimits_, cBeam);
     }
 
-    function unsetCBeamForRateLimits(address rateLimits, address cBeam) external roleAuth {
-        rateLimitsCBeams[rateLimits][cBeam] = 0;
-        emit UnsetCBeamForRateLimits(rateLimits, cBeam);
+    function unsetCBeamForRateLimits(address rateLimits_, address cBeam) external roleAuth {
+        rateLimitsCBeams[rateLimits_][cBeam] = 0;
+        emit UnsetCBeamForRateLimits(rateLimits_, cBeam);
     }
 
     function setCBeamForController(address controller, address cBeam) external roleAuth {
+        require(controllers[controller] == 1, "BeamState/not-existing-controller");
         require(cBeams[cBeam] == 1, "BeamState/not-existing-cBeam");
         controllersCBeams[controller][cBeam] = 1;
         emit SetCBeamForController(controller, cBeam);
@@ -174,14 +202,14 @@ contract BeamState {
         emit UnsetCBeamForController(controller, cBeam);
     }
 
-    function addInitRateLimits(bytes32 key, address rateLimits, uint256 maxAmount, uint256 slope) external roleAuth {
-        initRateLimits[key][rateLimits] = DefaultRateLimits(maxAmount, slope);
-        emit AddInitRateLimits(key, rateLimits, maxAmount, slope);
+    function addInitRateLimits(bytes32 key, address rateLimits_, uint256 maxAmount, uint256 slope) external roleAuth {
+        initRateLimits[key][rateLimits_] = DefaultRateLimits(maxAmount, slope);
+        emit AddInitRateLimits(key, rateLimits_, maxAmount, slope);
     }
 
-    function delInitRateLimits(bytes32 key, address rateLimits) external roleAuth {
-        delete initRateLimits[key][rateLimits];
-        emit DelInitRateLimits(key, rateLimits);
+    function delInitRateLimits(bytes32 key, address rateLimits_) external roleAuth {
+        delete initRateLimits[key][rateLimits_];
+        emit DelInitRateLimits(key, rateLimits_);
     }
 
     function addInitControllerActions(bytes calldata data, address controller) external roleAuth returns (bytes32 key) {
