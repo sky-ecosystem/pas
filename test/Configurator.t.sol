@@ -737,4 +737,59 @@ contract ConfiguratorTest is DssTest {
         assertGt(configurator.zzz(address(target1), key1), 0, "key1 should have zzz set");
         assertGt(configurator.zzz(address(target1), key2), 0, "key2 should have zzz set");
     }
+
+    // --- Stop/Start Tests ---
+
+    function testSetRateLimitStoppedAndAfterRestart() public {
+        bytes32 key = keccak256("test-key");
+
+        _setupCBeam(address(target1), CBEAM1);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
+        _setupRateLimitData(target1, key, 500 * WAD, 5 * WAD, 500 * WAD, block.timestamp);
+
+        // Stop the BeamState
+        beamState.stop();
+
+        // Try to set rate limit - should revert
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/stopped");
+        configurator.setRateLimit(address(target1), key, 600 * WAD, 6 * WAD);
+
+        // Restart the BeamState
+        beamState.start();
+
+        // Now it should work
+        vm.prank(CBEAM1);
+        configurator.setRateLimit(address(target1), key, 600 * WAD, 6 * WAD);
+
+        RateLimitsLike.RateLimitData memory result = target1.getRateLimitData(key);
+        assertEq(result.maxAmount, 600 * WAD, "maxAmount should be updated after restart");
+    }
+
+    function testCallControllerActionStoppedAndAfterRestart() public {
+        _setupCBeam(address(target1), CBEAM1);
+
+        bytes memory data = abi.encodeWithSignature("controllerFunction(uint256)", 123);
+        bytes32 key = keccak256(data);
+        beamState.addInitControllerActions(data, address(0)); // Global whitelist
+
+        // Stop the BeamState
+        beamState.stop();
+
+        // Try to call controller action - should revert
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/stopped");
+        configurator.callControllerAction(address(target1), data);
+
+        // Restart the BeamState
+        beamState.start();
+
+        // Now it should work
+        vm.prank(CBEAM1);
+        bytes memory ret = configurator.callControllerAction(address(target1), data);
+
+        uint256 result = abi.decode(ret, (uint256));
+        assertEq(result, 246, "controller function should return 123 * 2");
+        assertEq(target1.lastCallData(), data, "correct data should be passed to target");
+    }
 }

@@ -2,10 +2,11 @@
 pragma solidity ^0.8.21;
 
 interface BeamStateLike {
-    function getHop(address) external view returns (uint256);
-    function getMaxChange(address) external view returns (uint256);
     function controllersCBeams(address, address) external view returns (uint256);
     function rateLimitsCBeams(address, address) external view returns (uint256);
+    function stopped() external view returns (bool);
+    function getHop(address) external view returns (uint256);
+    function getMaxChange(address) external view returns (uint256);
     function getInitRateLimits(bytes32, address) external view returns (uint256, uint256);
     function isControllerActionEnabled(bytes32, address) external view returns (bool);
 }
@@ -45,6 +46,11 @@ contract Configurator {
 
     // --- Modifiers ---
 
+    modifier notStopped() {
+        require(!beamState.stopped(), "Configurator/stopped");
+        _;
+    }
+
     modifier authController(address controller) {
         require(beamState.controllersCBeams(controller, msg.sender) == 1, "Configurator/not-authorized-controller-cBeam");
         _;
@@ -69,7 +75,7 @@ contract Configurator {
 
     // cBeams functions
    
-    function setRateLimit(address rateLimits, bytes32 key, uint256 maxAmount, uint256 slope) external authRateLimits(rateLimits) {
+    function setRateLimit(address rateLimits, bytes32 key, uint256 maxAmount, uint256 slope) external notStopped authRateLimits(rateLimits) {
         (uint256 defMaxAmount, uint256 defSlope) = beamState.getInitRateLimits(key, rateLimits);
         if (defMaxAmount == type(uint256).max && defSlope == 0) {
             RateLimitsLike(rateLimits).setUnlimitedRateLimitData(key);
@@ -90,7 +96,7 @@ contract Configurator {
         }
     }
 
-    function callControllerAction(address controller, bytes calldata data) external authController(controller) returns (bytes memory ret) {
+    function callControllerAction(address controller, bytes calldata data) external notStopped authController(controller) returns (bytes memory ret) {
         require(beamState.isControllerActionEnabled(keccak256(data), controller), "Configurator/not-valid-data");
         bool ok;
         (ok, ret) = controller.call(data);

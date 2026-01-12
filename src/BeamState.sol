@@ -18,6 +18,8 @@ contract BeamState {
     mapping(address rateLimits_ => uint256 value)                                   public hop;                   // rateLimits == address(0) => general backup configuration
     mapping(address rateLimits_ => uint256 value)                                   public maxChange;             // rateLimits == address(0) => general backup configuration
 
+    bool public stopped;
+
     struct DefaultRateLimits {
         uint256 maxAmount;
         uint256 slope;
@@ -33,6 +35,8 @@ contract BeamState {
     event Deny(address indexed usr);
     event SetUserRole(address indexed who, uint8 indexed role, bool enabled);
     event SetRoleAction(uint8 indexed role, bytes4 sig, bool enabled);
+    event Stop();
+    event Start();
     event SetHop(address indexed rateLimits_, uint256 value);
     event SetMaxChange(address indexed rateLimits_, uint256 value);
     event AddCBeam(address indexed cBeam);
@@ -136,6 +140,16 @@ contract BeamState {
     }
 
     // --- Role authed functions ---
+
+    function stop() external roleAuth {
+        stopped = true;
+        emit Stop();
+    }
+
+    function start()external roleAuth {
+        stopped = false;
+        emit Start();
+    }
 
     function setHop(address rateLimits_, uint256 value) external roleAuth {
         hop[rateLimits_] = value;
