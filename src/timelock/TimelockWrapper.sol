@@ -16,30 +16,20 @@
 
 pragma solidity ^0.8.21;
 
-// Spark Mainnet controller aligned to: https://github.com/sparkdotfi/spark-alm-controller/blob/3dbc7cb01739e91dad61a75cda8d7c84b4474e0b/src/MainnetController.sol
-// Grove Mainnet controller aligned to: https://github.com/grove-labs/grove-alm-controller/blob/548c96fa22bcb13afd25cb592ec8cb4bb98c2d86/src/MainnetController.sol
-
 import { Timelock } from "src/timelock/Timelock.sol";
 
 interface BeamStateLike {
-    // Rate limit functions (timelocked)
+    function start() external;
     function setHop(address rateLimits_, uint256 value) external;
     function setMaxChange(address rateLimits_, uint256 value) external;
     function addRateLimits(address rateLimits_) external;
-    function addInitRateLimits(bytes32 key, address rateLimits_, uint256 maxAmount, uint256 slope) external;
-    
-    // Controller functions (timelocked)
     function addController(address rateLimits_) external;
-    function addInitControllerActions(bytes calldata data, address controller) external returns (bytes32 key);
-    
-    // CBeam functions (timelocked)
     function addCBeam(address cBeam) external;
-    
-    // System functions (timelocked)
-    function start() external;
+    function addInitRateLimits(bytes32 key, address rateLimits_, uint256 maxAmount, uint256 slope) external;
+    function addInitControllerActions(bytes calldata data, address controller) external returns (bytes32 key);
 }
 
-interface MainnetControllerLike {
+interface ControllerLike {
     // Spark functions
     function grantRole(bytes32 role, address account) external;
     function revokeRole(bytes32 role, address account) external;
@@ -66,6 +56,14 @@ struct RateLimitConfig {
     uint256 slope;
 }
 
+// Spark Mainnet controller aligned to: https://github.com/sparkdotfi/spark-alm-controller/blob/3dbc7cb01739e91dad61a75cda8d7c84b4474e0b/src/MainnetController.sol
+// Grove Mainnet controller aligned to: https://github.com/grove-labs/grove-alm-controller/blob/548c96fa22bcb13afd25cb592ec8cb4bb98c2d86/src/MainnetController.sol
+
+// Notes:
+// - This wrapper is assumed as a helper only, and can be bypassed by submitting payloads directly to the Timelock (for an authorised proposer).
+// - The wrapper is assumed to be frequently replaced/improved, depending on downstream contracts changes or other needs.
+// - Only the addInitRateLimits calls can be batched in this wrapper, other calls can use the predecessor mechanism to enforce ordering.
+// - As part of a controller onboarding it should be `kiss`ed on the PSM. That is assumed to be orchestrated without the wrapper.
 contract TimelockWrapper {
     // --- Auth ---
     mapping(address => uint256) public wards;
@@ -108,14 +106,12 @@ contract TimelockWrapper {
     event Diss(address indexed usr);
     event ProposalSubmitted(bytes32 indexed operationId, string functionName);
     
-    Timelock   public immutable timelock;
+    Timelock      public immutable timelock;
     BeamStateLike public immutable beamState;
-    address       public immutable mainnetController; // TODO: unused for now
     
-    constructor(address timelock_, address beamState_, address mainnetController_) {
-        timelock          = Timelock(payable(timelock_));
-        beamState         = BeamStateLike(beamState_);
-        mainnetController = mainnetController_;
+    constructor(address timelock_, address beamState_) {
+        timelock  = Timelock(payable(timelock_));
+        beamState = BeamStateLike(beamState_);
         
         wards[msg.sender] = 1;
         emit Rely(msg.sender);
@@ -135,67 +131,41 @@ contract TimelockWrapper {
         timelock.scheduleBatch(targets, values, payloads, predecessor, salt, delay);
     }
 
-    // --- System Functions ---
-
     function start(bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
         bytes memory payload = abi.encodeWithSelector(BeamStateLike.start.selector);
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "start");
     }
 
-    // --- Configuration Parameters ---
-
-    function setHop(address rateLimits_, uint256 value, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
-        bytes memory payload = abi.encodeWithSelector(
-            BeamStateLike.setHop.selector,
-            rateLimits_,
-            value
-        );
-
+    function setHop(address rateLimits, uint256 hop, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.setHop.selector, rateLimits, hop);
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setHop");
     }
 
-    function setMaxChange(address rateLimits_, uint256 value, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
-        bytes memory payload = abi.encodeWithSelector(
-            BeamStateLike.setMaxChange.selector,
-            rateLimits_,
-            value
-        );
-
+    function setMaxChange(address rateLimits, uint256 maxChange, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.setMaxChange.selector, rateLimits, maxChange);
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMaxChange");
     }
 
-    // --- CBeam Management ---
-
-    function addCBeam(address cBeam, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
-        bytes memory payload = abi.encodeWithSelector(
-            BeamStateLike.addCBeam.selector,
-            cBeam
-        );
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "addCBeam");
-    }
-
-    // --- Rate Limits Management ---
-
-    function addRateLimits(address rateLimits_, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addRateLimits.selector, rateLimits_);
+    function addRateLimits(address rateLimits, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addRateLimits.selector, rateLimits);
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "addRateLimits");
     }
 
-    // --- Controller Management ---
-
-    function addController(address rateLimits_, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addController.selector, rateLimits_);
+    function addController(address controller, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addController.selector, controller);
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "addController");
     }
 
-    // --- Rate Limits ---
+    function addCBeam(address cBeam, bytes32 predecessor, bytes32 salt, uint256 delay) external toll returns (bytes32 operationId) {
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addCBeam.selector, cBeam);
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "addCBeam");
+    }
 
     function addInitRateLimits(
         RateLimitConfig calldata config,
@@ -222,15 +192,13 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         uint256 len = configs.length;
-        require(len > 0, "TimelockWrapper/empty-configs");
 
         address[] memory targets = new address[](len);
         uint256[] memory values = new uint256[](len);
         bytes[] memory payloads = new bytes[](len);
-        address target = address(beamState);
 
         for (uint256 i = 0; i < len; ++i) {
-            targets[i] = target;
+            targets[i] = address(beamState);
             payloads[i] = abi.encodeWithSelector(
                 BeamStateLike.addInitRateLimits.selector,
                 configs[i].key,
@@ -250,8 +218,7 @@ contract TimelockWrapper {
 
     // Spark functions
 
-    // Common roles: RELAYER = keccak256("RELAYER"), FREEZER = keccak256("FREEZER")
-    // Role bytes32 can be computed off-chain and passed as parameter
+    // Role bytes32 can be computed off-chain and passed as parameter, e.g keccak256("RELAYER"), keccak256("FREEZER")
     function grantRole(
         address controller,
         bytes32 role,
@@ -261,7 +228,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.grantRole.selector,
+            ControllerLike.grantRole.selector,
             role,
             account
         );
@@ -280,7 +247,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.revokeRole.selector,
+            ControllerLike.revokeRole.selector,
             role,
             account
         );
@@ -299,7 +266,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setMintRecipient.selector,
+            ControllerLike.setMintRecipient.selector,
             destinationDomain,
             mintRecipient
         );
@@ -318,7 +285,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setLayerZeroRecipient.selector,
+            ControllerLike.setLayerZeroRecipient.selector,
             destinationEndpointId,
             layerZeroRecipient
         );
@@ -337,7 +304,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setMaxSlippage.selector,
+            ControllerLike.setMaxSlippage.selector,
             pool,
             maxSlippage
         );
@@ -356,7 +323,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setOTCBuffer.selector,
+            ControllerLike.setOTCBuffer.selector,
             exchange,
             otcBuffer
         );
@@ -375,7 +342,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setOTCRechargeRate.selector,
+            ControllerLike.setOTCRechargeRate.selector,
             exchange,
             rechargeRate18
         );
@@ -395,7 +362,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setOTCWhitelistedAsset.selector,
+            ControllerLike.setOTCWhitelistedAsset.selector,
             exchange,
             asset,
             isWhitelisted
@@ -417,7 +384,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setUniswapV4TickLimits.selector,
+            ControllerLike.setUniswapV4TickLimits.selector,
             poolId,
             tickLowerMin,
             tickUpperMax,
@@ -439,7 +406,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setMaxExchangeRate.selector,
+            ControllerLike.setMaxExchangeRate.selector,
             token,
             shares,
             maxExpectedAssets
@@ -461,7 +428,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setCentrifugeRecipient.selector,
+            ControllerLike.setCentrifugeRecipient.selector,
             centrifugeId,
             recipient
         );
@@ -480,7 +447,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setUniswapV3PoolLowerTick.selector,
+            ControllerLike.setUniswapV3PoolLowerTick.selector,
             pool,
             lowerTick
         );
@@ -499,7 +466,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setUniswapV3PoolUpperTick.selector,
+            ControllerLike.setUniswapV3PoolUpperTick.selector,
             pool,
             upperTick
         );
@@ -518,7 +485,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setUniswapV3PoolMaxTickDelta.selector,
+            ControllerLike.setUniswapV3PoolMaxTickDelta.selector,
             pool,
             maxTickDelta
         );
@@ -537,7 +504,7 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            MainnetControllerLike.setUniswapV3PoolTwapSecondsAgo.selector,
+            ControllerLike.setUniswapV3PoolTwapSecondsAgo.selector,
             pool,
             twapSecondsAgo
         );
