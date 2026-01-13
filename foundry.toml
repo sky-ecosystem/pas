@@ -3,4 +3,13 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
+remappings = [
+    "spark-alm-controller/=lib/spark-alm-controller/",
+    "dss-allocator/=lib/dss-allocator/",
+    "dss-test/=lib/dss-test/src/",
+    "dss-interfaces/=lib/dss-test/lib/dss-interfaces/src/",
+    "spark-address-registry/=lib/spark-alm-controller/lib/spark-address-registry/src/",
+    "spark-psm/=lib/spark-alm-controller/lib/spark-psm/",
+]
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
