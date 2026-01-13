@@ -4,3 +4,7 @@
 [submodule "lib/openzeppelin-contracts"]
 	path = lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "lib/dss-test"]
+	path = lib/dss-test
+	url = https://github.com/sky-ecosystem/dss-test
+
