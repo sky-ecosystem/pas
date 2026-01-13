@@ -43,14 +43,17 @@ interface BeamStateLike {
 }
 
 interface MainnetControllerLike {
+    // Spark functions
+    function grantRole(bytes32 role, address account) external;
+    function revokeRole(bytes32 role, address account) external;
     function setMintRecipient(uint32 destinationDomain, bytes32 mintRecipient) external;
     function setLayerZeroRecipient(uint32 destinationEndpointId, bytes32 layerZeroRecipient) external;
     function setMaxSlippage(address pool, uint256 maxSlippage) external;
-    function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
     function setOTCBuffer(address exchange, address otcBuffer) external;
     function setOTCRechargeRate(address exchange, uint256 rechargeRate18) external;
     function setOTCWhitelistedAsset(address exchange, address asset, bool isWhitelisted) external;
     function setUniswapV4TickLimits(bytes32 poolId, int24 tickLowerMin, int24 tickUpperMax, uint24 maxTickSpacing) external;
+    function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
     // Grove-only functions
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external;
     function setUniswapV3PoolLowerTick(address pool, int24 lowerTick) external;
@@ -247,6 +250,48 @@ contract ATWLTimeLockedWrapper {
     }
 
     // --- Controller Actions ---
+
+    // Spark functions
+
+    // Common roles: RELAYER = keccak256("RELAYER"), FREEZER = keccak256("FREEZER")
+    // Role bytes32 can be computed off-chain and passed as parameter
+    function grantRole(
+        address controller,
+        bytes32 role,
+        address account,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            MainnetControllerLike.grantRole.selector,
+            role,
+            account
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "grantRole");
+    }
+
+    function revokeRole(
+        address controller,
+        bytes32 role,
+        address account,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            MainnetControllerLike.revokeRole.selector,
+            role,
+            account
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "revokeRole");
+    }
 
     function setMintRecipient(
         uint32 destinationDomain,
