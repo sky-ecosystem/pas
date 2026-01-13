@@ -770,7 +770,6 @@ contract ConfiguratorTest is DssTest {
         _setupCBeam(address(target1), CBEAM1);
 
         bytes memory data = abi.encodeWithSignature("controllerFunction(uint256)", 123);
-        bytes32 key = keccak256(data);
         beamState.addInitControllerActions(data, address(0)); // Global whitelist
 
         // Stop the BeamState
