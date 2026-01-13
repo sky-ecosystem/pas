@@ -122,7 +122,7 @@ contract Timelock is TimelockController, Pausable {
         operations[id] = Operation(targets, values, payloads, predecessor, salt);
     }
 
-    function cancel(bytes32 id) public virtual override {
+    function cancel(bytes32 id) public virtual override whenNotPaused {
         super.cancel(id);
         _operationIds.remove(id);
         delete operations[id];
