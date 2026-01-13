@@ -16,11 +16,8 @@
 
 pragma solidity ^0.8.21;
 
-// PAU code aligned to: https://github.com/sunbreak1211/pau/blob/a3e4b519c238d32c08c82145f04341144361e943/src/Option_4/Configurator.sol
 // Spark Mainnet controller aligned to: https://github.com/sparkdotfi/spark-alm-controller/blob/3dbc7cb01739e91dad61a75cda8d7c84b4474e0b/src/MainnetController.sol
 // Grove Mainnet controller aligned to: https://github.com/grove-labs/grove-alm-controller/blob/548c96fa22bcb13afd25cb592ec8cb4bb98c2d86/src/MainnetController.sol
-
-// TODO: Consider renaming parameters for clarity - `rateLimits_` for rate limit functions, `controller` for controller functions
 
 import { Timelock } from "src/timelock/Timelock.sol";
 
