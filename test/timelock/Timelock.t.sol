@@ -17,7 +17,7 @@
 pragma solidity ^0.8.21;
 
 import {Test} from "forge-std/Test.sol";
-import {SkyTimelock} from "../../src/timelock/SkyTimelock.sol";
+import {Timelock} from "../../src/timelock/Timelock.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
@@ -49,8 +49,8 @@ contract MockTarget {
     }
 }
 
-contract SkyTimelockTest is Test {
-    SkyTimelock public timelock;
+contract TimelockTest is Test {
+    Timelock public timelock;
     MockTarget public mockTarget;
 
     address public admin;
@@ -132,7 +132,7 @@ contract SkyTimelockTest is Test {
         address[] memory pausers = new address[](1);
         pausers[0] = pauser;
 
-        timelock = new SkyTimelock(MIN_DELAY, admin, proposers, cancellers, pausers);
+        timelock = new Timelock(MIN_DELAY, admin, proposers, cancellers, pausers);
         mockTarget = new MockTarget();
     }
 
@@ -164,8 +164,8 @@ contract SkyTimelockTest is Test {
         address[] memory cancellers = new address[](0);
         address[] memory pausers = new address[](0);
 
-        vm.expectRevert("SkyTimelock/admin-zero-address");
-        new SkyTimelock(MIN_DELAY, address(0), proposers, cancellers, pausers);
+        vm.expectRevert("Timelock/admin-zero-address");
+        new Timelock(MIN_DELAY, address(0), proposers, cancellers, pausers);
     }
 
     function testConstructorMultipleProposers() public {
@@ -175,7 +175,7 @@ contract SkyTimelockTest is Test {
         address[] memory cancellers = new address[](0);
         address[] memory pausers = new address[](0);
 
-        SkyTimelock newTimelock = new SkyTimelock(MIN_DELAY, admin, proposers, cancellers, pausers);
+        Timelock newTimelock = new Timelock(MIN_DELAY, admin, proposers, cancellers, pausers);
         assertTrue(newTimelock.hasRole(newTimelock.PROPOSER_ROLE(), address(0x10)));
         assertTrue(newTimelock.hasRole(newTimelock.PROPOSER_ROLE(), address(0x11)));
     }
@@ -187,7 +187,7 @@ contract SkyTimelockTest is Test {
     function testScheduleReverts() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock/use-scheduleBatch");
+        vm.expectRevert("Timelock/use-scheduleBatch");
         timelock.schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -234,7 +234,7 @@ contract SkyTimelockTest is Test {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock/self-calls-disabled");
+        vm.expectRevert("Timelock/self-calls-disabled");
         _schedule(address(timelock), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -299,7 +299,7 @@ contract SkyTimelockTest is Test {
         payloads[1] = abi.encodeWithSelector(MockTarget.setValue.selector, 20);
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock/self-calls-disabled");
+        vm.expectRevert("Timelock/self-calls-disabled");
         timelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -313,7 +313,7 @@ contract SkyTimelockTest is Test {
         _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
         vm.warp(block.timestamp + MIN_DELAY);
         
-        vm.expectRevert("SkyTimelock/use-executeBatch");
+        vm.expectRevert("Timelock/use-executeBatch");
         timelock.execute(address(mockTarget), 0, data, bytes32(0), SALT);
     }
 
@@ -658,13 +658,13 @@ contract SkyTimelockTest is Test {
 
     function testUpdateDelayImmediatelyProposerCannotChangeDelay() public {
         bytes memory data = abi.encodeWithSelector(
-            SkyTimelock.updateDelayImmediately.selector,
+            Timelock.updateDelayImmediately.selector,
             2 days
         );
 
         // Try to schedule a call to updateDelayImmediately
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock/self-calls-disabled");
+        vm.expectRevert("Timelock/self-calls-disabled");
         _schedule(address(timelock), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -697,7 +697,7 @@ contract SkyTimelockTest is Test {
         );
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock/self-calls-disabled");
+        vm.expectRevert("Timelock/self-calls-disabled");
         _schedule(address(timelock), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -715,7 +715,7 @@ contract SkyTimelockTest is Test {
         );
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock/self-calls-disabled");
+        vm.expectRevert("Timelock/self-calls-disabled");
         timelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
     }
 
@@ -727,7 +727,7 @@ contract SkyTimelockTest is Test {
         );
 
         vm.prank(proposer);
-        vm.expectRevert("SkyTimelock/self-calls-disabled");
+        vm.expectRevert("Timelock/self-calls-disabled");
         _schedule(address(timelock), 0, data, bytes32(0), SALT, MIN_DELAY);
     }
 

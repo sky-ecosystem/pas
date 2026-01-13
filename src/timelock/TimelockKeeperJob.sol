@@ -24,7 +24,7 @@ interface SequencerLike {
     function isMaster(bytes32 network) external view returns (bool);
 }
 
-interface SkyTimelockLike {
+interface TimelockLike {
     struct Operation {
         address[] targets;
         uint256[] values;
@@ -47,7 +47,7 @@ interface SkyTimelockLike {
 contract TimelockKeeperJob is IJob {
 
     SequencerLike   public immutable sequencer;
-    SkyTimelockLike public immutable timelock;
+    TimelockLike public immutable timelock;
 
     // --- Errors ---
     error NotMaster(bytes32 network);
@@ -58,7 +58,7 @@ contract TimelockKeeperJob is IJob {
 
     constructor(address _sequencer, address _timelock) {
         sequencer = SequencerLike(_sequencer);
-        timelock  = SkyTimelockLike(_timelock);
+        timelock  = TimelockLike(_timelock);
     }
 
     function work(bytes32 network, bytes calldata) external {
@@ -67,7 +67,7 @@ contract TimelockKeeperJob is IJob {
         bytes32 id = timelock.getNextExecutableOperation();
         if (id == bytes32(0)) revert NoExecutableOperation();
 
-        SkyTimelockLike.Operation memory op = timelock.getOperation(id);
+        TimelockLike.Operation memory op = timelock.getOperation(id);
         
         // Assume that in case a proposal needs eth the timelock is pre-funded, or alternatively it is executed manually 
         timelock.executeBatch{value: 0}(op.targets, op.values, op.payloads, op.predecessor, op.salt);

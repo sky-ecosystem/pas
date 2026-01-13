@@ -20,7 +20,7 @@ import { TimelockController } from "@openzeppelin/contracts/governance/TimelockC
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-contract SkyTimelock is TimelockController, Pausable {
+contract Timelock is TimelockController, Pausable {
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -58,7 +58,7 @@ contract SkyTimelock is TimelockController, Pausable {
     ) TimelockController(minDelay, proposers, new address[](0), admin) {
 
         _revokeRole(DEFAULT_ADMIN_ROLE, address(this)); // do not allow proposers to change admin-only configurations
-        require(admin != address(0), "SkyTimelock/admin-zero-address");
+        require(admin != address(0), "Timelock/admin-zero-address");
 
         // add cancellers which are not necessarily proposers
         for (uint256 i = 0; i < cancellers.length; ++i) {
@@ -98,7 +98,7 @@ contract SkyTimelock is TimelockController, Pausable {
     // ------------------------------------------------------------------------
 
     function schedule(address, uint256, bytes calldata, bytes32, bytes32, uint256) public pure override {
-        revert("SkyTimelock/use-scheduleBatch");
+        revert("Timelock/use-scheduleBatch");
     }
 
     function scheduleBatch(
@@ -111,7 +111,7 @@ contract SkyTimelock is TimelockController, Pausable {
     ) public virtual override whenNotPaused {
         uint256 len = targets.length;
         for (uint256 i = 0; i < len; ++i) {
-            require(targets[i] != address(this), "SkyTimelock/self-calls-disabled");
+            require(targets[i] != address(this), "Timelock/self-calls-disabled");
         }
         
         super.scheduleBatch(targets, values, payloads, predecessor, salt, delay);
@@ -133,7 +133,7 @@ contract SkyTimelock is TimelockController, Pausable {
     // ------------------------------------------------------------------------
 
     function execute(address, uint256, bytes calldata, bytes32, bytes32) public payable override {
-        revert("SkyTimelock/use-executeBatch");
+        revert("Timelock/use-executeBatch");
     }
 
     function executeBatch(

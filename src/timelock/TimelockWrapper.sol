@@ -22,7 +22,7 @@ pragma solidity ^0.8.21;
 
 // TODO: Consider renaming parameters for clarity - `rateLimits_` for rate limit functions, `controller` for controller functions
 
-import { SkyTimelock } from "src/timelock/SkyTimelock.sol";
+import { Timelock } from "src/timelock/Timelock.sol";
 
 interface BeamStateLike {
     // Rate limit functions (timelocked)
@@ -69,18 +69,18 @@ struct RateLimitConfig {
     uint256 slope;
 }
 
-contract ATWLTimeLockedWrapper {
+contract TimelockWrapper {
     // --- Auth ---
     mapping(address => uint256) public wards;
     mapping(address => uint256) public buds;
 
     modifier auth() {
-        require(wards[msg.sender] == 1, "ATWLTimeLockedWrapper/not-authorized");
+        require(wards[msg.sender] == 1, "TimelockWrapper/not-authorized");
         _;
     }
 
     modifier toll() {
-        require(buds[msg.sender] == 1, "ATWLTimeLockedWrapper/not-whitelisted");
+        require(buds[msg.sender] == 1, "TimelockWrapper/not-whitelisted");
         _;
     }
 
@@ -111,12 +111,12 @@ contract ATWLTimeLockedWrapper {
     event Diss(address indexed usr);
     event ProposalSubmitted(bytes32 indexed operationId, string functionName);
     
-    SkyTimelock   public immutable timelock;
+    Timelock   public immutable timelock;
     BeamStateLike public immutable beamState;
     address       public immutable mainnetController; // TODO: unused for now
     
     constructor(address timelock_, address beamState_, address mainnetController_) {
-        timelock          = SkyTimelock(payable(timelock_));
+        timelock          = Timelock(payable(timelock_));
         beamState         = BeamStateLike(beamState_);
         mainnetController = mainnetController_;
         
@@ -225,7 +225,7 @@ contract ATWLTimeLockedWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         uint256 len = configs.length;
-        require(len > 0, "ATWLTimeLockedWrapper/empty-configs");
+        require(len > 0, "TimelockWrapper/empty-configs");
 
         address[] memory targets = new address[](len);
         uint256[] memory values = new uint256[](len);
