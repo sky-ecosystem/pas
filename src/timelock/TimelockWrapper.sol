@@ -40,7 +40,7 @@ interface BeamStateLike {
     function setHop(address rateLimits_, uint256 value) external;
     function setMaxChange(address rateLimits_, uint256 value) external;
     function addRateLimits(address rateLimits_) external;
-    function addController(address rateLimits_) external;
+    function addController(address controller) external;
     function addCBeam(address cBeam) external;
     function addInitRateLimits(bytes32 key, address rateLimits_, uint256 maxAmount, uint256 slope) external;
     function addInitControllerActions(bytes calldata data, address controller) external returns (bytes32 key);
