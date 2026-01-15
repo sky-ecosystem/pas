@@ -226,7 +226,7 @@ contract BeamStateTest is DssTest {
     }
 
     function testSetMaxChangeBelowWad() public {
-        vm.expectRevert("Configurator/maxChange-below-1x");
+        vm.expectRevert("BeamState/maxChange-below-1x");
         beamState.setMaxChange(TARGET1, WAD - 1);
     }
 

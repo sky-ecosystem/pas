@@ -157,7 +157,7 @@ contract BeamState {
     }
 
     function setMaxChange(address rateLimits_, uint256 value) external roleAuth {
-        require(value >= WAD, "Configurator/maxChange-below-1x");
+        require(value >= WAD, "BeamState/maxChange-below-1x");
         maxChange[rateLimits_] = value;
         emit SetMaxChange(rateLimits_, value);
     }
@@ -172,9 +172,9 @@ contract BeamState {
         emit DelRateLimits(rateLimits_);
     }
 
-    function addController(address rateLimits_) external roleAuth {
-        controllers[rateLimits_] = 1;
-        emit AddController(rateLimits_);
+    function addController(address controller) external roleAuth {
+        controllers[controller] = 1;
+        emit AddController(controller);
     }
 
     function delController(address controller) external roleAuth {
