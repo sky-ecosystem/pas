@@ -39,14 +39,14 @@ interface ControllerLike {
     function setOTCBuffer(address exchange, address otcBuffer) external;
     function setOTCRechargeRate(address exchange, uint256 rechargeRate18) external;
     function setOTCWhitelistedAsset(address exchange, address asset, bool isWhitelisted) external;
-    function setUniswapV4TickLimits(bytes32 poolId, int24 tickLowerMin, int24 tickUpperMax, uint24 maxTickSpacing) external;
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
+    function setUniswapV4TickLimits(bytes32 poolId, int24 tickLowerMin, int24 tickUpperMax, uint24 maxTickSpacing) external;
     // Grove-only functions
-    function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external;
-    function setUniswapV3PoolLowerTick(address pool, int24 lowerTick) external;
-    function setUniswapV3PoolUpperTick(address pool, int24 upperTick) external;
     function setUniswapV3PoolMaxTickDelta(address pool, uint24 maxTickDelta) external;
-    function setUniswapV3PoolTwapSecondsAgo(address pool, uint32 twapSecondsAgo) external;
+    function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external;
+    function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external;
+    function setUniswapV3TwapSecondsAgo(address pool, uint32 twapSecondsAgo) external;
+    function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external;
 }
 
 struct RateLimitConfig {
@@ -373,6 +373,27 @@ contract TimelockWrapper {
         emit ProposalSubmitted(operationId, "setOTCWhitelistedAsset");
     }
     
+    function setMaxExchangeRate(
+        address token,
+        uint256 shares,
+        uint256 maxExpectedAssets,
+        address controller,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            ControllerLike.setMaxExchangeRate.selector,
+            token,
+            shares,
+            maxExpectedAssets
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setMaxExchangeRate");
+    }
+
     function setUniswapV4TickLimits(
         bytes32 poolId,
         int24 tickLowerMin,
@@ -396,86 +417,8 @@ contract TimelockWrapper {
         emit ProposalSubmitted(operationId, "setUniswapV4TickLimits");
     }
     
-    function setMaxExchangeRate(
-        address token,
-        uint256 shares,
-        uint256 maxExpectedAssets,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setMaxExchangeRate.selector,
-            token,
-            shares,
-            maxExpectedAssets
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setMaxExchangeRate");
-    }
-    
     // Grove-only functions
-    
-    function setCentrifugeRecipient(
-        uint16 centrifugeId,
-        bytes32 recipient,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setCentrifugeRecipient.selector,
-            centrifugeId,
-            recipient
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
 
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setCentrifugeRecipient");
-    }
-    
-    function setUniswapV3PoolLowerTick(
-        address pool,
-        int24 lowerTick,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setUniswapV3PoolLowerTick.selector,
-            pool,
-            lowerTick
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setUniswapV3PoolLowerTick");
-    }
-    
-    function setUniswapV3PoolUpperTick(
-        address pool,
-        int24 upperTick,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setUniswapV3PoolUpperTick.selector,
-            pool,
-            upperTick
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setUniswapV3PoolUpperTick");
-    }
-    
     function setUniswapV3PoolMaxTickDelta(
         address pool,
         uint24 maxTickDelta,
@@ -494,8 +437,46 @@ contract TimelockWrapper {
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setUniswapV3PoolMaxTickDelta");
     }
+
+    function setUniswapV3AddLiquidityLowerTickBound(
+        address pool,
+        int24 lowerTickBound,
+        address controller,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            ControllerLike.setUniswapV3AddLiquidityLowerTickBound.selector,
+            pool,
+            lowerTickBound
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setUniswapV3AddLiquidityLowerTickBound");
+    }
     
-    function setUniswapV3PoolTwapSecondsAgo(
+    function setUniswapV3AddLiquidityUpperTickBound(
+        address pool,
+        int24 upperTickBound,
+        address controller,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            ControllerLike.setUniswapV3AddLiquidityUpperTickBound.selector,
+            pool,
+            upperTickBound
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setUniswapV3AddLiquidityUpperTickBound");
+    }
+    
+    function setUniswapV3TwapSecondsAgo(
         address pool,
         uint32 twapSecondsAgo,
         address controller,
@@ -504,14 +485,33 @@ contract TimelockWrapper {
         uint256 delay
     ) external toll returns (bytes32 operationId) {
         bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setUniswapV3PoolTwapSecondsAgo.selector,
+            ControllerLike.setUniswapV3TwapSecondsAgo.selector,
             pool,
             twapSecondsAgo
         );
         bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setUniswapV3PoolTwapSecondsAgo");
+        emit ProposalSubmitted(operationId, "setUniswapV3TwapSecondsAgo");
+    }
+
+    function setCentrifugeRecipient(
+        uint16 centrifugeId,
+        bytes32 recipient,
+        address controller,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            ControllerLike.setCentrifugeRecipient.selector,
+            centrifugeId,
+            recipient
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setCentrifugeRecipient");
     }
 }
 
