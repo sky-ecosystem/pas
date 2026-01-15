@@ -16,7 +16,24 @@
 
 pragma solidity ^0.8.21;
 
-import { Timelock } from "src/timelock/Timelock.sol";
+interface TimelockLike {
+    function scheduleBatch(
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory payloads,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external;
+
+    function hashOperationBatch(
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory payloads,
+        bytes32 predecessor,
+        bytes32 salt
+    ) external view returns (bytes32);
+}
 
 interface BeamStateLike {
     function start() external;
@@ -105,12 +122,12 @@ contract TimelockWrapper {
     event Kiss(address indexed usr);
     event Diss(address indexed usr);
     event ProposalSubmitted(bytes32 indexed operationId, string functionName);
-    
-    Timelock      public immutable timelock;
+
+    TimelockLike  public immutable timelock;
     BeamStateLike public immutable beamState;
     
     constructor(address timelock_, address beamState_) {
-        timelock  = Timelock(payable(timelock_));
+        timelock  = TimelockLike(payable(timelock_));
         beamState = BeamStateLike(beamState_);
         
         wards[msg.sender] = 1;
