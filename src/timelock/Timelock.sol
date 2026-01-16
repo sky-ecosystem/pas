@@ -51,24 +51,11 @@ contract Timelock is TimelockController, Pausable {
 
     constructor(
         uint256 minDelay,
-        address admin,
-        address[] memory proposers,
-        address[] memory cancellers, // by default all proposers are added as cancellers, so no need to include them here
-        address[] memory pausers
-    ) TimelockController(minDelay, proposers, new address[](0), admin) {
-
-        _revokeRole(DEFAULT_ADMIN_ROLE, address(this)); // do not allow proposers to change admin-only configurations
+        address admin
+    ) TimelockController(minDelay, new address[](0), new address[](0), admin) {
         require(admin != address(0), "Timelock/admin-zero-address");
 
-        // add cancellers which are not necessarily proposers
-        for (uint256 i = 0; i < cancellers.length; ++i) {
-            _grantRole(CANCELLER_ROLE, cancellers[i]);
-        }
-
-        for (uint256 i = 0; i < pausers.length; ++i) {
-            _grantRole(PAUSER_ROLE, pausers[i]);
-        }
-
+        _revokeRole(DEFAULT_ADMIN_ROLE, address(this)); // do not allow proposers to change admin-only configurations
         _grantRole(EXECUTOR_ROLE, address(0)); // allow anyone to execute
     }
 

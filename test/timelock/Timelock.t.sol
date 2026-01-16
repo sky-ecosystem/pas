@@ -83,19 +83,20 @@ contract TimelockTest is Test {
         pauser    = address(0x4);
         other     = address(0x5);
 
-        address[] memory proposers = new address[](2);
-        proposers[0] = proposer;
-        proposers[1] = proposer2;
-
-        address[] memory cancellers = new address[](1);
-        cancellers[0] = canceller;
-
-        address[] memory pausers = new address[](1);
-        pausers[0] = pauser;
-
-        timelock    = new Timelock(MIN_DELAY, admin, proposers, cancellers, pausers);
+        timelock    = new Timelock(MIN_DELAY, admin);
         mockTarget  = new MockTarget();
         mockTarget2 = new MockTarget();
+
+        // Grant roles after deployment
+        vm.startPrank(admin);
+        timelock.grantRole(timelock.PROPOSER_ROLE(), proposer);
+        timelock.grantRole(timelock.PROPOSER_ROLE(), proposer2);
+        // Proposers also get canceller role (matches original TimelockController behavior)
+        timelock.grantRole(timelock.CANCELLER_ROLE(), proposer);
+        timelock.grantRole(timelock.CANCELLER_ROLE(), proposer2);
+        timelock.grantRole(timelock.CANCELLER_ROLE(), canceller);
+        timelock.grantRole(timelock.PAUSER_ROLE(), pauser);
+        vm.stopPrank();
 
         vm.deal(address(timelock), 100 ether);
     }
@@ -158,12 +159,13 @@ contract TimelockTest is Test {
     // Constructor and Initialization Tests
     // ============================================================================
 
-    function testConstructorInitialization() public {
+    function testConstructorInitialization() public view {
         assertEq(timelock.getMinDelay(), MIN_DELAY);
         assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), proposer));
         assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), proposer2));
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), proposer));
+        assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), proposer2));
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), canceller));
         assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), pauser));
         assertTrue(timelock.hasRole(timelock.EXECUTOR_ROLE(), address(0)));
@@ -171,13 +173,8 @@ contract TimelockTest is Test {
     }
 
     function testConstructorRevertsIfAdminIsZero() public {
-        address[] memory proposers = new address[](1);
-        proposers[0] = proposer;
-        address[] memory cancellers = new address[](0);
-        address[] memory pausers = new address[](0);
-
         vm.expectRevert("Timelock/admin-zero-address");
-        new Timelock(MIN_DELAY, address(0), proposers, cancellers, pausers);
+        new Timelock(MIN_DELAY, address(0));
     }
 
     // ============================================================================

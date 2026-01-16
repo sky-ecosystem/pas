@@ -84,12 +84,10 @@ contract TimelockKeeperJobTest is Test {
         sequencer.setMaster(NETWORK, true);
 
         // Deploy timelock
-        address[] memory proposers = new address[](1);
-        proposers[0] = proposer;
-        address[] memory cancellers = new address[](0);
-        address[] memory pausers = new address[](0);
+        timelock = new Timelock(MIN_DELAY, admin);
 
-        timelock = new Timelock(MIN_DELAY, admin, proposers, cancellers, pausers);
+        // Grant proposer role after deployment
+        timelock.grantRole(timelock.PROPOSER_ROLE(), proposer);
 
         // Deploy keeper
         keeper = new TimelockKeeperJob(address(sequencer), address(timelock), 100);
