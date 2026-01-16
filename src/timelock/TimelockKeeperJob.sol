@@ -33,7 +33,7 @@ interface TimelockLike {
         bytes32 salt;
     }
 
-    function getNextExecutableOperation() external view returns (bytes32 id);
+    function getNextExecutableOperation(uint256 maxIterations) external view returns (bytes32 id);
     function getOperation(bytes32 id) external view returns (Operation memory op);
     function executeBatch(
         address[] calldata targets,
@@ -46,8 +46,9 @@ interface TimelockLike {
 
 contract TimelockKeeperJob is IJob {
 
-    SequencerLike   public immutable sequencer;
-    TimelockLike public immutable timelock;
+    SequencerLike public immutable sequencer;
+    TimelockLike  public immutable timelock;
+    uint256       public immutable maxIterations;
 
     // --- Errors ---
     error NotMaster(bytes32 network);
@@ -56,15 +57,16 @@ contract TimelockKeeperJob is IJob {
     // --- Events ---
     event Work(bytes32 indexed network, bytes32 indexed operationId);
 
-    constructor(address _sequencer, address _timelock) {
-        sequencer = SequencerLike(_sequencer);
-        timelock  = TimelockLike(_timelock);
+    constructor(address _sequencer, address _timelock, uint256 _maxIterations) {
+        sequencer     = SequencerLike(_sequencer);
+        timelock      = TimelockLike(_timelock);
+        maxIterations = _maxIterations;
     }
 
     function work(bytes32 network, bytes calldata) external {
         if (!sequencer.isMaster(network)) revert NotMaster(network);
 
-        bytes32 id = timelock.getNextExecutableOperation();
+        bytes32 id = timelock.getNextExecutableOperation(maxIterations);
         if (id == bytes32(0)) revert NoExecutableOperation();
 
         TimelockLike.Operation memory op = timelock.getOperation(id);

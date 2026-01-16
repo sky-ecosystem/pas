@@ -153,24 +153,31 @@ contract Timelock is TimelockController, Pausable {
     // Keeper job helpers
     // ------------------------------------------------------------------------
 
-    // Operations may still not be executable due to various downstream conditions. 
+    // Operations may still not be executable due to various downstream conditions.
     // It is assumed that this is not a perfect fetching mechanism and that if needed proposals
     // can be executed without cron keepers, or canceled in case they are jamming this mechanism.
     function getNextExecutableOperation() public view returns (bytes32 id) {
+        return getNextExecutableOperation(0);
+    }
+
+    /// Returns the next executable operation, limited by maxIterations (0 = no limit)
+    function getNextExecutableOperation(uint256 maxIterations) public view returns (bytes32 id) {
         uint256 length = _operationIds.length();
-        for (uint256 i = 0; i < length; ++i) {
+        uint256 limit = maxIterations == 0 ? length : (maxIterations < length ? maxIterations : length);
+
+        for (uint256 i = 0; i < limit; ++i) {
             bytes32 operationId = _operationIds.at(i);
-            
+
             // Check if operation is ready
             if (!isOperationReady(operationId)) continue;
-            
+
             // Check if predecessor is done, if any
             Operation memory op = operations[operationId];
             if (op.predecessor != bytes32(0) && !isOperationDone(op.predecessor)) continue;
-            
+
             return operationId;
         }
-        
+
         return bytes32(0);
     }
 
