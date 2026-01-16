@@ -119,7 +119,7 @@ contract BeamState {
         emit Deny(usr);
     }
 
-    function setUserRole(address who, uint8 role, bool enabled) public auth {
+    function setUserRole(address who, uint8 role, bool enabled) external auth {
         bytes32 mask = bytes32(uint256(1) << role);
         if (enabled) {
             userRoles[who] |= mask;
