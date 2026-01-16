@@ -717,7 +717,7 @@ contract IntegrationTest is Test {
             // 1f. Schedule addInitRateLimits (via wrapper with RateLimitConfig)
             vm.prank(coreCouncil);
             opIds[5] = timelockWrapper.addInitRateLimits(
-                RateLimitConfig({key: rateLimitKey, rateLimits_: address(mockRateLimits), maxAmount: 1__000 ether, slope: 100 ether}),
+                RateLimitConfig({key: rateLimitKey, rateLimits_: address(mockRateLimits), maxAmount: 1_000 ether, slope: 100 ether}),
                 opIds[4], keccak256("addInitRateLimits"), MIN_DELAY
             );
 
