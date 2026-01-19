@@ -194,7 +194,7 @@ contract TimelockWrapperTest is DssTest {
     }
 
     function testTollModifiers() public {
-        bytes4[] memory tolledMethods = new bytes4[](23);
+        bytes4[] memory tolledMethods = new bytes4[](22);
         tolledMethods[0]  = wrapper.start.selector;
         tolledMethods[1]  = wrapper.setHop.selector;
         tolledMethods[2]  = wrapper.setMaxChange.selector;
@@ -212,12 +212,11 @@ contract TimelockWrapperTest is DssTest {
         tolledMethods[14] = wrapper.setOTCRechargeRate.selector;
         tolledMethods[15] = wrapper.setOTCWhitelistedAsset.selector;
         tolledMethods[16] = wrapper.setMaxExchangeRate.selector;
-        tolledMethods[17] = wrapper.setUniswapV4TickLimits.selector;
-        tolledMethods[18] = wrapper.setUniswapV3PoolMaxTickDelta.selector;
-        tolledMethods[19] = wrapper.setUniswapV3AddLiquidityLowerTickBound.selector;
-        tolledMethods[20] = wrapper.setUniswapV3AddLiquidityUpperTickBound.selector;
-        tolledMethods[21] = wrapper.setUniswapV3TwapSecondsAgo.selector;
-        tolledMethods[22] = wrapper.setCentrifugeRecipient.selector;
+        tolledMethods[17] = wrapper.setUniswapV3PoolMaxTickDelta.selector;
+        tolledMethods[18] = wrapper.setUniswapV3AddLiquidityLowerTickBound.selector;
+        tolledMethods[19] = wrapper.setUniswapV3AddLiquidityUpperTickBound.selector;
+        tolledMethods[20] = wrapper.setUniswapV3TwapSecondsAgo.selector;
+        tolledMethods[21] = wrapper.setCentrifugeRecipient.selector;
 
         vm.startPrank(address(0xBEEF));
         checkModifier(address(wrapper), "TimelockWrapper/not-whitelisted", tolledMethods);
@@ -668,20 +667,5 @@ contract TimelockWrapperTest is DssTest {
         vm.prank(cBeam);
         configurator.callControllerAction(GROVE_CONTROLLER, data);
         assertEq(grove.centrifugeRecipients(centrifugeId), recipient);
-    }
-
-    // ============================================================================
-    // Schedule-Only Test (UniswapV4 - not on current mainnet controllers)
-    // ============================================================================
-
-    function testSetUniswapV4TickLimitsSchedulesCorrectly() public {
-        // UniswapV4 functions added in v1.9.0, but mainnet controller is v1.8.0
-        // See: https://github.com/sparkdotfi/spark-alm-controller/releases/tag/v1.9.0
-        bytes32 poolId = keccak256("pool");
-        vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setUniswapV4TickLimits(poolId, -887220, 887220, 200, SPARK_CONTROLLER, bytes32(0), keccak256("v4"), MIN_DELAY);
-
-        assertTrue(opId != bytes32(0));
-        assertTrue(timelock.isOperationPending(opId));
     }
 }

@@ -47,18 +47,18 @@ interface BeamStateLike {
 }
 
 interface ControllerLike {
-    // Spark functions
+    // Shared functions (Spark v1.8.0 & Grove v1.8.0)
     function grantRole(bytes32 role, address account) external;
     function revokeRole(bytes32 role, address account) external;
     function setMintRecipient(uint32 destinationDomain, bytes32 mintRecipient) external;
     function setLayerZeroRecipient(uint32 destinationEndpointId, bytes32 layerZeroRecipient) external;
     function setMaxSlippage(address pool, uint256 maxSlippage) external;
+    function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
+    // Spark-only functions (v1.8.0)
     function setOTCBuffer(address exchange, address otcBuffer) external;
     function setOTCRechargeRate(address exchange, uint256 rechargeRate18) external;
     function setOTCWhitelistedAsset(address exchange, address asset, bool isWhitelisted) external;
-    function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
-    function setUniswapV4TickLimits(bytes32 poolId, int24 tickLowerMin, int24 tickUpperMax, uint24 maxTickSpacing) external;
-    // Grove-only functions
+    // Grove-only functions (v1.8.0)
     function setUniswapV3PoolMaxTickDelta(address pool, uint24 maxTickDelta) external;
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external;
     function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external;
@@ -73,8 +73,8 @@ struct RateLimitConfig {
     uint256 slope;
 }
 
-// Spark Mainnet controller aligned to: https://github.com/sparkdotfi/spark-alm-controller/blob/3dbc7cb01739e91dad61a75cda8d7c84b4474e0b/src/MainnetController.sol
-// Grove Mainnet controller aligned to: https://github.com/grove-labs/grove-alm-controller/blob/548c96fa22bcb13afd25cb592ec8cb4bb98c2d86/src/MainnetController.sol
+// Spark Mainnet controller aligned to v1.8.0: https://github.com/sparkdotfi/spark-alm-controller/blob/7be959378fe48117f7a06796f94e240345428982/src/MainnetController.sol
+// Grove Mainnet controller aligned to v1.8.0: https://github.com/grove-labs/grove-alm-controller/blob/2c6e3d4297d5f244894d05f3dbbe47bcada34712/src/MainnetController.sol
 
 // Notes:
 // - This wrapper is assumed as a helper only, and can be bypassed by submitting payloads directly to the Timelock (for an authorised proposer).
@@ -411,29 +411,6 @@ contract TimelockWrapper {
         emit ProposalSubmitted(operationId, "setMaxExchangeRate");
     }
 
-    function setUniswapV4TickLimits(
-        bytes32 poolId,
-        int24 tickLowerMin,
-        int24 tickUpperMax,
-        uint24 maxTickSpacing,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setUniswapV4TickLimits.selector,
-            poolId,
-            tickLowerMin,
-            tickUpperMax,
-            maxTickSpacing
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setUniswapV4TickLimits");
-    }
-    
     // Grove-only functions
 
     function setUniswapV3PoolMaxTickDelta(
