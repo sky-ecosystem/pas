@@ -168,7 +168,6 @@ contract Timelock is TimelockController, Pausable {
         return bytes32(0);
     }
 
-
     function getOperationCount() external view returns (uint256) {
         return _operationIds.length();
     }
