@@ -33,7 +33,6 @@ interface ControllerLike {
     function mintRecipients(uint32) external view returns (bytes32);
     function setMintRecipient(uint32 destinationDomain, bytes32 mintRecipient) external;
     function rateLimits() external view returns (address);
-    function proxy() external view returns (address);
     // Shared getters
     function layerZeroRecipients(uint32) external view returns (bytes32);
     function maxSlippages(address) external view returns (uint256);
@@ -59,16 +58,20 @@ contract TimelockWrapperTest is DssTest {
     event Diss(address indexed usr);
 
     // --- Mainnet Addresses ---
+    // https://github.com/sparkdotfi/spark-address-registry/blob/0a06d13c3e9d36428a6f916ac25528d82154517b/src/Ethereum.sol
     address constant SPARK_CONTROLLER = 0xE52d643B27601D4d2BAB2052f30cf936ed413cec;
-    address constant SPARK_ADMIN      = 0x3300f198988e4C9C63F75dF86De36421f06af8c4;
+    address constant SPARK_PROXY      = 0x3300f198988e4C9C63F75dF86De36421f06af8c4;
+
+    // https://github.com/grove-labs/grove-address-registry/blob/dd625925ab44e89eadce0cb4258e32aae2dfa73e/src/Ethereum.sol
     address constant GROVE_CONTROLLER = 0xfd9dEA9a8D5B955649579Af482DB7198A392A9F5;
-    address constant GROVE_ADMIN      = 0x1369f7b2b38c76B6478c0f0E66D94923421891Ba;
+    address constant GROVE_PROXY      = 0x1369f7b2b38c76B6478c0f0E66D94923421891Ba;
 
     uint256 constant FORK_BLOCK = 24250000;
     uint256 constant MIN_DELAY  = 1 days;
 
+    bytes32 constant OZ_DEFAULT_ADMIN_ROLE = bytes32(0);
+
     // --- Fetched from controllers ---
-    address public SPARK_ALM_PROXY;
     address public SPARK_RATE_LIMITS;
     address public GROVE_RATE_LIMITS;
 
@@ -84,8 +87,7 @@ contract TimelockWrapperTest is DssTest {
     function setUp() public {
         vm.createSelectFork(vm.envString("ETH_RPC_URL"), FORK_BLOCK);
 
-        // Fetch proxy and rate limits from controllers
-        SPARK_ALM_PROXY   = ControllerLike(SPARK_CONTROLLER).proxy();
+        // Fetch rate limits from controllers
         SPARK_RATE_LIMITS = ControllerLike(SPARK_CONTROLLER).rateLimits();
         GROVE_RATE_LIMITS = ControllerLike(GROVE_CONTROLLER).rateLimits();
 
@@ -101,28 +103,28 @@ contract TimelockWrapperTest is DssTest {
         wrapper      = TimelockWrapper(pas.timelockWrapper);
 
         // Grant configurator admin role on mainnet controllers and rate limiters
-        vm.startPrank(SPARK_ADMIN);
-        ControllerLike(SPARK_CONTROLLER).grantRole(bytes32(0), address(configurator));
-        RateLimitsLike(SPARK_RATE_LIMITS).grantRole(bytes32(0), address(configurator));
+        vm.startPrank(SPARK_PROXY);
+        ControllerLike(SPARK_CONTROLLER).grantRole(OZ_DEFAULT_ADMIN_ROLE, address(configurator));
+        RateLimitsLike(SPARK_RATE_LIMITS).grantRole(OZ_DEFAULT_ADMIN_ROLE, address(configurator));
         vm.stopPrank();
 
-        vm.startPrank(GROVE_ADMIN);
-        ControllerLike(GROVE_CONTROLLER).grantRole(bytes32(0), address(configurator));
-        RateLimitsLike(GROVE_RATE_LIMITS).grantRole(bytes32(0), address(configurator));
+        vm.startPrank(GROVE_PROXY);
+        ControllerLike(GROVE_CONTROLLER).grantRole(OZ_DEFAULT_ADMIN_ROLE, address(configurator));
+        RateLimitsLike(GROVE_RATE_LIMITS).grantRole(OZ_DEFAULT_ADMIN_ROLE, address(configurator));
         vm.stopPrank();
 
         // Setup controllers, rate limiters, and cBeam in BeamState
         vm.startPrank(coreCouncil);
-        bytes32 op1 = wrapper.addController(SPARK_CONTROLLER, bytes32(0), keccak256("spark-ctrl"), MIN_DELAY);
-        _execute(op1, abi.encodeWithSelector(BeamState.addController.selector, SPARK_CONTROLLER), bytes32(0), keccak256("spark-ctrl"));
-        bytes32 op2 = wrapper.addController(GROVE_CONTROLLER, bytes32(0), keccak256("grove-ctrl"), MIN_DELAY);
-        _execute(op2, abi.encodeWithSelector(BeamState.addController.selector, GROVE_CONTROLLER), bytes32(0), keccak256("grove-ctrl"));
-        bytes32 op3 = wrapper.addRateLimits(SPARK_RATE_LIMITS, bytes32(0), keccak256("spark-rl"), MIN_DELAY);
-        _execute(op3, abi.encodeWithSelector(BeamState.addRateLimits.selector, SPARK_RATE_LIMITS), bytes32(0), keccak256("spark-rl"));
-        bytes32 op4 = wrapper.addRateLimits(GROVE_RATE_LIMITS, bytes32(0), keccak256("grove-rl"), MIN_DELAY);
-        _execute(op4, abi.encodeWithSelector(BeamState.addRateLimits.selector, GROVE_RATE_LIMITS), bytes32(0), keccak256("grove-rl"));
-        bytes32 op5 = wrapper.addCBeam(cBeam, bytes32(0), keccak256("cbeam"), MIN_DELAY);
-        _execute(op5, abi.encodeWithSelector(BeamState.addCBeam.selector, cBeam), bytes32(0), keccak256("cbeam"));
+        wrapper.addController(SPARK_CONTROLLER, bytes32(0), keccak256("spark-ctrl"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addController.selector, SPARK_CONTROLLER), bytes32(0), keccak256("spark-ctrl"));
+        wrapper.addController(GROVE_CONTROLLER, bytes32(0), keccak256("grove-ctrl"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addController.selector, GROVE_CONTROLLER), bytes32(0), keccak256("grove-ctrl"));
+        wrapper.addRateLimits(SPARK_RATE_LIMITS, bytes32(0), keccak256("spark-rl"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addRateLimits.selector, SPARK_RATE_LIMITS), bytes32(0), keccak256("spark-rl"));
+        wrapper.addRateLimits(GROVE_RATE_LIMITS, bytes32(0), keccak256("grove-rl"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addRateLimits.selector, GROVE_RATE_LIMITS), bytes32(0), keccak256("grove-rl"));
+        wrapper.addCBeam(cBeam, bytes32(0), keccak256("cbeam"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addCBeam.selector, cBeam), bytes32(0), keccak256("cbeam"));
 
         // Verify wrapper correctly configured BeamState
         assertEq(beamState.controllers(SPARK_CONTROLLER), 1, "Spark controller not added");
@@ -143,7 +145,7 @@ contract TimelockWrapperTest is DssTest {
     // Helpers
     // ============================================================================
 
-    function _execute(bytes32 opId, bytes memory payload, bytes32 predecessor, bytes32 salt) internal {
+    function _execute(bytes memory payload, bytes32 predecessor, bytes32 salt) internal {
         vm.warp(block.timestamp + MIN_DELAY);
         address[] memory targets = new address[](1);
         targets[0] = address(beamState);
@@ -233,50 +235,56 @@ contract TimelockWrapperTest is DssTest {
         assertTrue(beamState.stopped());
 
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.start(bytes32(0), keccak256("start"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.start.selector), bytes32(0), keccak256("start"));
+        wrapper.start(bytes32(0), keccak256("start"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.start.selector), bytes32(0), keccak256("start"));
 
         assertFalse(beamState.stopped());
     }
 
     function testSetHop() public {
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setHop(SPARK_RATE_LIMITS, 3600, bytes32(0), keccak256("hop"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.setHop.selector, SPARK_RATE_LIMITS, 3600), bytes32(0), keccak256("hop"));
+        wrapper.setHop(SPARK_RATE_LIMITS, 3600, bytes32(0), keccak256("hop"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.setHop.selector, SPARK_RATE_LIMITS, 3600), bytes32(0), keccak256("hop"));
 
         assertEq(beamState.getHop(SPARK_RATE_LIMITS), 3600);
     }
 
     function testSetMaxChange() public {
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setMaxChange(GROVE_RATE_LIMITS, 2e18, bytes32(0), keccak256("mc"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.setMaxChange.selector, GROVE_RATE_LIMITS, 2e18), bytes32(0), keccak256("mc"));
+        wrapper.setMaxChange(GROVE_RATE_LIMITS, 2e18, bytes32(0), keccak256("mc"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.setMaxChange.selector, GROVE_RATE_LIMITS, 2e18), bytes32(0), keccak256("mc"));
 
         assertEq(beamState.maxChange(GROVE_RATE_LIMITS), 2e18);
     }
 
     function testAddRateLimits() public {
-        vm.prank(coreCouncil);
-        bytes32 opId = wrapper.addRateLimits(SPARK_RATE_LIMITS, bytes32(0), keccak256("rl"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addRateLimits.selector, SPARK_RATE_LIMITS), bytes32(0), keccak256("rl"));
+        address rateLimits = makeAddr("rateLimits");
 
-        assertEq(beamState.rateLimits(SPARK_RATE_LIMITS), 1);
+        vm.prank(coreCouncil);
+        wrapper.addRateLimits(rateLimits, bytes32(0), keccak256("rl"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addRateLimits.selector, rateLimits), bytes32(0), keccak256("rl"));
+
+        assertEq(beamState.rateLimits(rateLimits), 1);
     }
 
     function testAddController() public {
-        vm.prank(coreCouncil);
-        bytes32 opId = wrapper.addController(SPARK_CONTROLLER, bytes32(0), keccak256("ctrl"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addController.selector, SPARK_CONTROLLER), bytes32(0), keccak256("ctrl"));
+        address controller = makeAddr("controller");
 
-        assertEq(beamState.controllers(SPARK_CONTROLLER), 1);
+        vm.prank(coreCouncil);
+        wrapper.addController(controller, bytes32(0), keccak256("ctrl"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addController.selector, controller), bytes32(0), keccak256("ctrl"));
+
+        assertEq(beamState.controllers(controller), 1);
     }
 
     function testAddCBeam() public {
-        vm.prank(coreCouncil);
-        bytes32 opId = wrapper.addCBeam(SPARK_ALM_PROXY, bytes32(0), keccak256("cbeam"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addCBeam.selector, SPARK_ALM_PROXY), bytes32(0), keccak256("cbeam"));
+        address beam = makeAddr("beam");
 
-        assertEq(beamState.cBeams(SPARK_ALM_PROXY), 1);
+        vm.prank(coreCouncil);
+        wrapper.addCBeam(beam, bytes32(0), keccak256("cbeam"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addCBeam.selector, beam), bytes32(0), keccak256("cbeam"));
+
+        assertEq(beamState.cBeams(beam), 1);
     }
 
     function _checkAddInitRateLimits(address rateLimits, bytes32 key, bytes32 salt) internal {
@@ -288,8 +296,8 @@ contract TimelockWrapperTest is DssTest {
         });
 
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.addInitRateLimits(config, bytes32(0), salt, MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitRateLimits.selector, config.key, config.rateLimits, config.maxAmount, config.slope), bytes32(0), salt);
+        wrapper.addInitRateLimits(config, bytes32(0), salt, MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitRateLimits.selector, config.key, config.rateLimits, config.maxAmount, config.slope), bytes32(0), salt);
 
         // Verify stored in BeamState
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(config.key, rateLimits);
@@ -376,8 +384,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(ControllerLike.grantRole.selector, role, account);
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.grantRole(controller, role, account, bytes32(0), salt, MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
+        wrapper.grantRole(controller, role, account, bytes32(0), salt, MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
 
         vm.prank(cBeam);
         configurator.callControllerAction(controller, data);
@@ -404,8 +412,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(ControllerLike.revokeRole.selector, role, account);
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.revokeRole(controller, role, account, bytes32(0), salt, MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
+        wrapper.revokeRole(controller, role, account, bytes32(0), salt, MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
 
         vm.prank(cBeam);
         configurator.callControllerAction(controller, data);
@@ -413,11 +421,11 @@ contract TimelockWrapperTest is DssTest {
     }
 
     function testRevokeRoleOnSparkController() public {
-        _checkRevokeRole(SPARK_CONTROLLER, SPARK_ADMIN, keccak256("revokeS"));
+        _checkRevokeRole(SPARK_CONTROLLER, SPARK_PROXY, keccak256("revokeS"));
     }
 
     function testRevokeRoleOnGroveController() public {
-        _checkRevokeRole(GROVE_CONTROLLER, GROVE_ADMIN, keccak256("revokeG"));
+        _checkRevokeRole(GROVE_CONTROLLER, GROVE_PROXY, keccak256("revokeG"));
     }
 
     // --- setMintRecipient (Spark & Grove) ---
@@ -429,8 +437,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(ControllerLike.setMintRecipient.selector, domain, recipient);
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setMintRecipient(domain, recipient, controller, bytes32(0), salt, MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
+        wrapper.setMintRecipient(domain, recipient, controller, bytes32(0), salt, MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
 
         vm.prank(cBeam);
         configurator.callControllerAction(controller, data);
@@ -454,8 +462,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setLayerZeroRecipient(uint32,bytes32)")), endpointId, recipient);
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setLayerZeroRecipient(endpointId, recipient, controller, bytes32(0), salt, MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
+        wrapper.setLayerZeroRecipient(endpointId, recipient, controller, bytes32(0), salt, MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
 
         vm.prank(cBeam);
         configurator.callControllerAction(controller, data);
@@ -479,8 +487,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setMaxSlippage(address,uint256)")), pool, slippage);
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setMaxSlippage(pool, slippage, controller, bytes32(0), salt, MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
+        wrapper.setMaxSlippage(pool, slippage, controller, bytes32(0), salt, MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
 
         vm.prank(cBeam);
         configurator.callControllerAction(controller, data);
@@ -504,8 +512,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setOTCBuffer(address,address)")), exchange, buffer);
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setOTCBuffer(exchange, buffer, SPARK_CONTROLLER, bytes32(0), keccak256("buf"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, SPARK_CONTROLLER), bytes32(0), keccak256("buf"));
+        wrapper.setOTCBuffer(exchange, buffer, SPARK_CONTROLLER, bytes32(0), keccak256("buf"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, SPARK_CONTROLLER), bytes32(0), keccak256("buf"));
 
         vm.prank(cBeam);
         configurator.callControllerAction(SPARK_CONTROLLER, data);
@@ -521,8 +529,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setOTCRechargeRate(address,uint256)")), exchange, 1e18);
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setOTCRechargeRate(exchange, 1e18, SPARK_CONTROLLER, bytes32(0), keccak256("rate"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, SPARK_CONTROLLER), bytes32(0), keccak256("rate"));
+        wrapper.setOTCRechargeRate(exchange, 1e18, SPARK_CONTROLLER, bytes32(0), keccak256("rate"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, SPARK_CONTROLLER), bytes32(0), keccak256("rate"));
 
         vm.prank(cBeam);
         configurator.callControllerAction(SPARK_CONTROLLER, data);
@@ -541,16 +549,16 @@ contract TimelockWrapperTest is DssTest {
         // First set the buffer (required before whitelisting assets)
         bytes memory bufferData = abi.encodeWithSelector(bytes4(keccak256("setOTCBuffer(address,address)")), exchange, buffer);
         vm.prank(coreCouncil);
-        bytes32 bufOpId = wrapper.setOTCBuffer(exchange, buffer, SPARK_CONTROLLER, bytes32(0), keccak256("wlbuf"), MIN_DELAY);
-        _execute(bufOpId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, bufferData, SPARK_CONTROLLER), bytes32(0), keccak256("wlbuf"));
+        wrapper.setOTCBuffer(exchange, buffer, SPARK_CONTROLLER, bytes32(0), keccak256("wlbuf"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, bufferData, SPARK_CONTROLLER), bytes32(0), keccak256("wlbuf"));
         vm.prank(cBeam);
         configurator.callControllerAction(SPARK_CONTROLLER, bufferData);
 
         // Now whitelist the asset
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setOTCWhitelistedAsset(address,address,bool)")), exchange, usdc, true);
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setOTCWhitelistedAsset(exchange, usdc, true, SPARK_CONTROLLER, bytes32(0), keccak256("wl"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, SPARK_CONTROLLER), bytes32(0), keccak256("wl"));
+        wrapper.setOTCWhitelistedAsset(exchange, usdc, true, SPARK_CONTROLLER, bytes32(0), keccak256("wl"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, SPARK_CONTROLLER), bytes32(0), keccak256("wl"));
 
         vm.prank(cBeam);
         configurator.callControllerAction(SPARK_CONTROLLER, data);
@@ -567,8 +575,8 @@ contract TimelockWrapperTest is DssTest {
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setMaxExchangeRate(address,uint256,uint256)")), sDAI, shares, maxExpectedAssets);
 
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setMaxExchangeRate(sDAI, shares, maxExpectedAssets, controller, bytes32(0), salt, MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
+        wrapper.setMaxExchangeRate(sDAI, shares, maxExpectedAssets, controller, bytes32(0), salt, MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, controller), bytes32(0), salt);
 
         vm.prank(cBeam);
         configurator.callControllerAction(controller, data);
@@ -592,8 +600,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setUniswapV3PoolMaxTickDelta(address,uint24)")), pool, uint24(1000));
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setUniswapV3PoolMaxTickDelta(pool, 1000, GROVE_CONTROLLER, bytes32(0), keccak256("tick"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("tick"));
+        wrapper.setUniswapV3PoolMaxTickDelta(pool, 1000, GROVE_CONTROLLER, bytes32(0), keccak256("tick"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("tick"));
 
         vm.prank(cBeam);
         configurator.callControllerAction(GROVE_CONTROLLER, data);
@@ -609,8 +617,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setUniswapV3AddLiquidityLowerTickBound(address,int24)")), pool, int24(-887220));
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setUniswapV3AddLiquidityLowerTickBound(pool, -887220, GROVE_CONTROLLER, bytes32(0), keccak256("lower"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("lower"));
+        wrapper.setUniswapV3AddLiquidityLowerTickBound(pool, -887220, GROVE_CONTROLLER, bytes32(0), keccak256("lower"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("lower"));
 
         vm.prank(cBeam);
         configurator.callControllerAction(GROVE_CONTROLLER, data);
@@ -626,8 +634,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setUniswapV3AddLiquidityUpperTickBound(address,int24)")), pool, int24(887220));
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setUniswapV3AddLiquidityUpperTickBound(pool, 887220, GROVE_CONTROLLER, bytes32(0), keccak256("upper"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("upper"));
+        wrapper.setUniswapV3AddLiquidityUpperTickBound(pool, 887220, GROVE_CONTROLLER, bytes32(0), keccak256("upper"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("upper"));
 
         vm.prank(cBeam);
         configurator.callControllerAction(GROVE_CONTROLLER, data);
@@ -643,8 +651,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setUniswapV3TwapSecondsAgo(address,uint32)")), pool, uint32(1800));
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setUniswapV3TwapSecondsAgo(pool, 1800, GROVE_CONTROLLER, bytes32(0), keccak256("twap"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("twap"));
+        wrapper.setUniswapV3TwapSecondsAgo(pool, 1800, GROVE_CONTROLLER, bytes32(0), keccak256("twap"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("twap"));
 
         vm.prank(cBeam);
         configurator.callControllerAction(GROVE_CONTROLLER, data);
@@ -661,8 +669,8 @@ contract TimelockWrapperTest is DssTest {
 
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("setCentrifugeRecipient(uint16,bytes32)")), centrifugeId, recipient);
         vm.prank(coreCouncil);
-        bytes32 opId = wrapper.setCentrifugeRecipient(centrifugeId, recipient, GROVE_CONTROLLER, bytes32(0), keccak256("cent"), MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("cent"));
+        wrapper.setCentrifugeRecipient(centrifugeId, recipient, GROVE_CONTROLLER, bytes32(0), keccak256("cent"), MIN_DELAY);
+        _execute(abi.encodeWithSelector(BeamState.addInitControllerActions.selector, data, GROVE_CONTROLLER), bytes32(0), keccak256("cent"));
 
         vm.prank(cBeam);
         configurator.callControllerAction(GROVE_CONTROLLER, data);
