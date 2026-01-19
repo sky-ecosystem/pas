@@ -68,7 +68,7 @@ interface ControllerLike {
 
 struct RateLimitConfig {
     bytes32 key;
-    address rateLimits_;
+    address rateLimits;
     uint256 maxAmount;
     uint256 slope;
 }
@@ -79,7 +79,7 @@ struct RateLimitConfig {
 // Notes:
 // - This wrapper is assumed as a helper only, and can be bypassed by submitting payloads directly to the Timelock (for an authorised proposer).
 // - The wrapper is assumed to be frequently replaced/improved, depending on downstream contracts changes or other needs.
-// - Only the addInitRateLimits calls can be batched in this wrapper, other calls can use the predecessor mechanism to enforce ordering.
+// - The actual downstream changes only take effect when govops use the BEAMState configurations, so atomicity in configurations can not be assumed.
 // - As part of a controller onboarding it should be `kiss`ed on the PSM. That is assumed to be orchestrated without the wrapper.
 contract TimelockWrapper {
     // --- Auth ---
@@ -193,7 +193,7 @@ contract TimelockWrapper {
         bytes memory payload = abi.encodeWithSelector(
             BeamStateLike.addInitRateLimits.selector,
             config.key,
-            config.rateLimits_,
+            config.rateLimits,
             config.maxAmount,
             config.slope
         );
@@ -219,7 +219,7 @@ contract TimelockWrapper {
             payloads[i] = abi.encodeWithSelector(
                 BeamStateLike.addInitRateLimits.selector,
                 configs[i].key,
-                configs[i].rateLimits_,
+                configs[i].rateLimits,
                 configs[i].maxAmount,
                 configs[i].slope
             );

@@ -282,14 +282,14 @@ contract TimelockWrapperTest is DssTest {
     function _checkAddInitRateLimits(address rateLimits, bytes32 key, bytes32 salt) internal {
         RateLimitConfig memory config = RateLimitConfig({
             key: key,
-            rateLimits_: rateLimits,
+            rateLimits: rateLimits,
             maxAmount: 10_000_000e18,
             slope: 1_000_000e18
         });
 
         vm.prank(coreCouncil);
         bytes32 opId = wrapper.addInitRateLimits(config, bytes32(0), salt, MIN_DELAY);
-        _execute(opId, abi.encodeWithSelector(BeamState.addInitRateLimits.selector, config.key, config.rateLimits_, config.maxAmount, config.slope), bytes32(0), salt);
+        _execute(opId, abi.encodeWithSelector(BeamState.addInitRateLimits.selector, config.key, config.rateLimits, config.maxAmount, config.slope), bytes32(0), salt);
 
         // Verify stored in BeamState
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(config.key, rateLimits);
@@ -329,7 +329,7 @@ contract TimelockWrapperTest is DssTest {
         bytes[] memory payloads = new bytes[](2);
         for (uint256 i = 0; i < 2; i++) {
             targets[i] = address(beamState);
-            payloads[i] = abi.encodeWithSelector(BeamState.addInitRateLimits.selector, configs[i].key, configs[i].rateLimits_, configs[i].maxAmount, configs[i].slope);
+            payloads[i] = abi.encodeWithSelector(BeamState.addInitRateLimits.selector, configs[i].key, configs[i].rateLimits, configs[i].maxAmount, configs[i].slope);
         }
         timelock.executeBatch(targets, values, payloads, bytes32(0), salt);
 
