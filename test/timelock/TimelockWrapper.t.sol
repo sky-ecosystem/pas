@@ -166,10 +166,14 @@ contract TimelockWrapperTest is DssTest {
     // Authorization Tests
     // ============================================================================
 
-    function testConstructor() public view {
-        assertEq(address(wrapper.timelock()), address(timelock), "Timelock set correctly");
-        assertEq(address(wrapper.beamState()), address(beamState), "BeamState set correctly");
-        assertEq(wrapper.wards(address(this)), 1, "Deployer is ward");
+    function testConstructor() public {
+        vm.expectEmit(true, false, false, true);
+        emit Rely(address(this));
+        TimelockWrapper newWrapper = new TimelockWrapper(address(timelock), address(beamState));
+
+        assertEq(address(newWrapper.timelock()), address(timelock), "Timelock set correctly");
+        assertEq(address(newWrapper.beamState()), address(beamState), "BeamState set correctly");
+        assertEq(newWrapper.wards(address(this)), 1, "Deployer is ward");
     }
 
     function testAuth() public {
@@ -191,11 +195,9 @@ contract TimelockWrapperTest is DssTest {
     }
 
     function testAuthModifiers() public {
-        bytes4[] memory authedMethods = new bytes4[](4);
-        authedMethods[0] = wrapper.rely.selector;
-        authedMethods[1] = wrapper.deny.selector;
-        authedMethods[2] = wrapper.kiss.selector;
-        authedMethods[3] = wrapper.diss.selector;
+        bytes4[] memory authedMethods = new bytes4[](2);
+        authedMethods[0] = wrapper.kiss.selector;
+        authedMethods[1] = wrapper.diss.selector;
 
         vm.startPrank(address(0xBEEF));
         checkModifier(address(wrapper), "TimelockWrapper/not-authorized", authedMethods);
