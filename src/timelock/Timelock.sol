@@ -156,8 +156,8 @@ contract Timelock is TimelockController, Pausable {
             if (!isOperationReady(operationId)) continue;
 
             // Check if predecessor is done, if any
-            Operation memory op = operations[operationId];
-            if (op.predecessor != bytes32(0) && !isOperationDone(op.predecessor)) continue;
+            bytes32 predecessor = operations[operationId].predecessor;
+            if (predecessor != bytes32(0) && !isOperationDone(predecessor)) continue;
 
             return operationId;
         }
