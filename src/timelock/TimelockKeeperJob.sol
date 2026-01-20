@@ -33,7 +33,7 @@ interface TimelockLike {
         bytes32 salt;
     }
 
-    function getNextExecutableOperation(uint256 startIndex, uint256 maxIterations) external view returns (bytes32 id, uint256 nextIndex);
+    function getNextExecutableOperation(uint256 startIndex, uint256 maxIterations) external view returns (bytes32 id);
     function getOperation(bytes32 id) external view returns (Operation memory op);
     function executeBatch(
         address[] calldata targets,
@@ -66,7 +66,7 @@ contract TimelockKeeperJob is IJob {
     function work(bytes32 network, bytes calldata) external {
         if (!sequencer.isMaster(network)) revert NotMaster(network);
 
-        (bytes32 id,) = timelock.getNextExecutableOperation(0, maxIterations);
+        bytes32 id = timelock.getNextExecutableOperation(0, maxIterations);
         if (id == bytes32(0)) revert NoExecutableOperation();
 
         TimelockLike.Operation memory op = timelock.getOperation(id);
