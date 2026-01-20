@@ -18,18 +18,18 @@ pragma solidity ^0.8.21;
 
 interface TimelockLike {
     function scheduleBatch(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory payloads,
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata payloads,
         bytes32 predecessor,
         bytes32 salt,
         uint256 delay
     ) external;
 
     function hashOperationBatch(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory payloads,
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata payloads,
         bytes32 predecessor,
         bytes32 salt
     ) external view returns (bytes32);
