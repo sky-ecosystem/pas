@@ -143,7 +143,7 @@ contract Timelock is TimelockController, Pausable {
     // Operations may still not be executable due to various downstream conditions.
     // It is assumed that this is not a perfect fetching mechanism and that if needed proposals
     // can be executed without cron keepers, or canceled in case they are jamming this mechanism.
-    function getNextExecutableOperation(uint256 startIndex, uint256 maxIterations) public view returns (bytes32 id) {
+    function getNextExecutableOperation(uint256 startIndex, uint256 maxIterations) external view returns (bytes32 id) {
         uint256 length = _operationIds.length();
         if (startIndex >= length) return bytes32(0);
 
@@ -167,7 +167,7 @@ contract Timelock is TimelockController, Pausable {
         return bytes32(0);
     }
 
-    function getOperationIndex(bytes32 id) public view returns (bool exists, uint256 index) {
+    function getOperationIndex(bytes32 id) external view returns (bool exists, uint256 index) {
         uint256 position = _operationIds._inner._positions[id];
         if (position == 0) {
             return (false, 0);
