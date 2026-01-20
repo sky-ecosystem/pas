@@ -39,7 +39,6 @@ contract Timelock is TimelockController, Pausable {
 
     // Changes from original timelock:
     // - Do not allow proposers to change admin-only configurations
-    // - Support adding cancellers which are not proposers
     // - Make execution permissionless
     // - Add pausing logic
     // - Allow admin to change the delay immediately
@@ -96,8 +95,7 @@ contract Timelock is TimelockController, Pausable {
         bytes32 salt,
         uint256 delay
     ) public virtual override whenNotPaused {
-        uint256 len = targets.length;
-        for (uint256 i = 0; i < len; ++i) {
+        for (uint256 i = 0; i < targets.length; ++i) {
             require(targets[i] != address(this), "Timelock/self-calls-disabled");
         }
         

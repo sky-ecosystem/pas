@@ -16,8 +16,10 @@
 
 pragma solidity ^0.8.21;
 
+// TODO: import this from dss-cron/src/interfaces once porting this contract
 interface IJob {
-    function workable(bytes32 network) external returns (bool, bytes memory);
+    function work(bytes32 network, bytes calldata args) external;
+    function workable(bytes32 network) external returns (bool canWork, bytes memory args);
 }
 
 interface SequencerLike {
@@ -63,7 +65,7 @@ contract TimelockKeeperJob is IJob {
         maxIterations = _maxIterations;
     }
 
-    function work(bytes32 network, bytes calldata) external {
+    function work(bytes32 network, bytes calldata) external override {
         if (!sequencer.isMaster(network)) revert NotMaster(network);
 
         bytes32 id = timelock.getNextExecutableOperation(0, maxIterations);
