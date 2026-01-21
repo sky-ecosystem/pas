@@ -66,8 +66,8 @@ contract BeamState {
     event UnsetCBeamForRateLimits(address indexed rateLimits_, address indexed cBeam);
     event AddInitRateLimits(bytes32 indexed key, address indexed rateLimits_, uint256 maxAmount, uint256 slope);
     event DelInitRateLimits(bytes32 indexed key, address indexed rateLimits_);
-    event AddInitControllerActions(bytes32 indexed key, address indexed rateLimits_);
-    event DelInitControllerActions(bytes32 indexed key, address indexed rateLimits_);
+    event AddInitControllerActions(bytes32 indexed key, address indexed controller);
+    event DelInitControllerActions(bytes32 indexed key, address indexed controller);
 
     // --- Modifiers ---
 
@@ -161,7 +161,7 @@ contract BeamState {
         emit Stop();
     }
 
-    function start()external roleAuth {
+    function start() external roleAuth {
         stopped = false;
         emit Start();
     }
