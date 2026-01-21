@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.24;
 
 interface BeamStateLike {
     function controllersCBeams(address, address) external view returns (uint256);
