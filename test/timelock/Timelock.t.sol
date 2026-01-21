@@ -371,10 +371,9 @@ contract TimelockTest is Test {
 
     function testCannotScheduleDuplicate() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
-        bytes32 id = _hashOperation(address(mockTarget), 0, data, bytes32(0), SALT);
 
         vm.startPrank(proposer);
-        _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
+        bytes32 id = _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
         vm.expectRevert(abi.encodeWithSelector(TimelockController.TimelockUnexpectedOperationState.selector, id, bytes32(1 << uint8(TimelockController.OperationState.Unset))));
         _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
@@ -455,10 +454,9 @@ contract TimelockTest is Test {
 
     function testExecuteRevertsIfNotReady() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
-        bytes32 id = _hashOperation(address(mockTarget), 0, data, bytes32(0), SALT);
 
         vm.prank(proposer);
-        _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
+        bytes32 id = _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
         vm.expectRevert(abi.encodeWithSelector(TimelockController.TimelockUnexpectedOperationState.selector, id, bytes32(1 << uint8(TimelockController.OperationState.Ready))));
         _execute(address(mockTarget), 0, data, bytes32(0), SALT);
@@ -540,10 +538,9 @@ contract TimelockTest is Test {
 
     function testExecuteWithPredecessor() public {
         bytes memory data1 = abi.encodeWithSelector(MockTarget.setValue.selector, 1);
-        bytes32 id1 = _hashOperation(address(mockTarget), 0, data1, bytes32(0), SALT);
 
         vm.prank(proposer);
-        _schedule(address(mockTarget), 0, data1, bytes32(0), SALT, MIN_DELAY);
+        bytes32 id1 = _schedule(address(mockTarget), 0, data1, bytes32(0), SALT, MIN_DELAY);
 
         bytes memory data2 = abi.encodeWithSelector(MockTarget.setValue.selector, 2);
 
@@ -561,10 +558,9 @@ contract TimelockTest is Test {
 
     function testExecuteRevertsIfPredecessorNotDone() public {
         bytes memory data1 = abi.encodeWithSelector(MockTarget.setValue.selector, 1);
-        bytes32 id1 = _hashOperation(address(mockTarget), 0, data1, bytes32(0), SALT);
 
         vm.prank(proposer);
-        _schedule(address(mockTarget), 0, data1, bytes32(0), SALT, MIN_DELAY);
+        bytes32 id1 = _schedule(address(mockTarget), 0, data1, bytes32(0), SALT, MIN_DELAY);
 
         bytes memory data2 = abi.encodeWithSelector(MockTarget.setValue.selector, 2);
 
@@ -601,10 +597,9 @@ contract TimelockTest is Test {
 
     function testCancelProposerCanCancel() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
-        bytes32 id = _hashOperation(address(mockTarget), 0, data, bytes32(0), SALT);
 
         vm.prank(proposer);
-        _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
+        bytes32 id = _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
         vm.prank(proposer);
         vm.expectEmit(true, false, false, false);
@@ -616,10 +611,9 @@ contract TimelockTest is Test {
 
     function testCancelCancellerCanCancel() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
-        bytes32 id = _hashOperation(address(mockTarget), 0, data, bytes32(0), SALT);
 
         vm.prank(proposer);
-        _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
+        bytes32 id = _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
         vm.prank(canceller);
         timelock.cancel(id);
@@ -629,10 +623,9 @@ contract TimelockTest is Test {
 
     function testCancelRevertsIfNotAuthorized() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
-        bytes32 id = _hashOperation(address(mockTarget), 0, data, bytes32(0), SALT);
 
         vm.prank(proposer);
-        _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
+        bytes32 id = _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
         bytes32 cancellerRole = timelock.CANCELLER_ROLE();
         vm.prank(other);
@@ -642,10 +635,9 @@ contract TimelockTest is Test {
 
     function testCancelCannotCancelAfterExecution() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
-        bytes32 id = _hashOperation(address(mockTarget), 0, data, bytes32(0), SALT);
 
         vm.prank(proposer);
-        _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
+        bytes32 id = _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
         vm.warp(block.timestamp + MIN_DELAY);
         _execute(address(mockTarget), 0, data, bytes32(0), SALT);
@@ -904,8 +896,7 @@ contract TimelockTest is Test {
     // ============================================================================
 
     function testGetNextExecutableOperationEmpty() public view {
-        bytes32 id = timelock.getNextExecutableOperation(0, 0);
-        assertEq(id, bytes32(0));
+        assertEq(timelock.getNextExecutableOperation(0, 0), bytes32(0));
     }
 
     function testGetNextExecutableOperationNotReady() public {
@@ -914,8 +905,7 @@ contract TimelockTest is Test {
         vm.prank(proposer);
         _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
-        bytes32 id = timelock.getNextExecutableOperation(0, 0);
-        assertEq(id, bytes32(0));
+        assertEq(timelock.getNextExecutableOperation(0, 0), bytes32(0));
     }
 
     function testGetNextExecutableOperationReady() public {
@@ -926,8 +916,7 @@ contract TimelockTest is Test {
 
         vm.warp(block.timestamp + MIN_DELAY);
 
-        bytes32 id = timelock.getNextExecutableOperation(0, 0);
-        assertEq(id, expectedId);
+        assertEq(timelock.getNextExecutableOperation(0, 0), expectedId);
     }
 
     function testGetNextExecutableOperationMultipleReturnsFirst() public {
@@ -947,29 +936,25 @@ contract TimelockTest is Test {
 
         vm.warp(block.timestamp + MIN_DELAY);
 
-        bytes32 nextId = timelock.getNextExecutableOperation(0, 0);
-        assertEq(nextId, id1);
+        assertEq(timelock.getNextExecutableOperation(0, 0), id1);
     }
 
-    function testGetNextExecutableOperationSkipsPendingPredecessor() public {
+    function testGetNextExecutableOperationChangesAfterExecution() public {
         bytes memory data1 = abi.encodeWithSelector(MockTarget.setValue.selector, 1);
         bytes memory data2 = abi.encodeWithSelector(MockTarget.setValue.selector, 2);
 
         vm.startPrank(proposer);
         bytes32 id1 = _schedule(address(mockTarget), 0, data1, bytes32(0), keccak256("s1"), MIN_DELAY);
-        _schedule(address(mockTarget), 0, data2, id1, keccak256("s2"), MIN_DELAY);
+        bytes32 id2 = _schedule(address(mockTarget), 0, data2, id1, keccak256("s2"), MIN_DELAY);
         vm.stopPrank();
 
         vm.warp(block.timestamp + MIN_DELAY);
 
-        bytes32 nextId = timelock.getNextExecutableOperation(0, 0);
-        assertEq(nextId, id1);
+        assertEq(timelock.getNextExecutableOperation(0, 0), id1);
 
         _execute(address(mockTarget), 0, data1, bytes32(0), keccak256("s1"));
 
-        nextId = timelock.getNextExecutableOperation(0, 0);
-        bytes32 id2 = _hashOperation(address(mockTarget), 0, data2, id1, keccak256("s2"));
-        assertEq(nextId, id2);
+        assertEq(timelock.getNextExecutableOperation(0, 0), id2);
     }
 
     function testGetNextExecutableOperationWithMaxIterations() public {
@@ -989,17 +974,14 @@ contract TimelockTest is Test {
 
         vm.warp(block.timestamp + MIN_DELAY);
 
-        // With maxIterations=3, should not find the ready operation (it's at index 3)
-        bytes32 id = timelock.getNextExecutableOperation(0, 3);
-        assertEq(id, bytes32(0), "Should not find with limit 3");
+        // With maxIterations=3, should not find the ready operation (it's at index 3);
+        assertEq(timelock.getNextExecutableOperation(0, 3), bytes32(0), "Should not find with limit 3");
 
         // With maxIterations=4, should find it
-        id = timelock.getNextExecutableOperation(0, 4);
-        assertEq(id, readyId, "Should find with limit 4");
+        assertEq(timelock.getNextExecutableOperation(0, 4), readyId, "Should find with limit 4");
 
         // With maxIterations=100, should also find it
-        id = timelock.getNextExecutableOperation(0, 100);
-        assertEq(id, readyId, "Should find with limit 100");
+        assertEq(timelock.getNextExecutableOperation(0, 100), readyId, "Should find with limit 100");
     }
 
     function testGetNextExecutableOperationZeroMeansNoLimit() public {
@@ -1018,8 +1000,7 @@ contract TimelockTest is Test {
         vm.warp(block.timestamp + MIN_DELAY);
 
         // With maxIterations=0 (no limit), should find it even though it's at index 10
-        bytes32 id = timelock.getNextExecutableOperation(0, 0);
-        assertEq(id, readyId, "Zero should mean no limit");
+        assertEq(timelock.getNextExecutableOperation(0, 0), readyId, "Zero should mean no limit");
     }
 
     function testGetNextExecutableOperationStartIndexPastEnd() public {
@@ -1028,8 +1009,7 @@ contract TimelockTest is Test {
         _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
         // length=1, startIndex=5 -> returns bytes32(0)
-        bytes32 id = timelock.getNextExecutableOperation(5, 0);
-        assertEq(id, bytes32(0));
+        assertEq(timelock.getNextExecutableOperation(5, 0), bytes32(0));
     }
 
     function testGetNextExecutableOperationLargeMaxIterations() public {
@@ -1040,8 +1020,7 @@ contract TimelockTest is Test {
         vm.warp(block.timestamp + MIN_DELAY);
 
         // Very large maxIterations should not overflow
-        bytes32 id = timelock.getNextExecutableOperation(0, type(uint256).max);
-        assertEq(id, expectedId);
+        assertEq(timelock.getNextExecutableOperation(0, type(uint256).max), expectedId);
     }
 
     function testGetNextExecutableOperationPagination() public {
@@ -1057,8 +1036,7 @@ contract TimelockTest is Test {
         vm.warp(block.timestamp + MIN_DELAY);
 
         // First call finds id1
-        bytes32 id = timelock.getNextExecutableOperation(0, 0);
-        assertEq(id, id1);
+        assertEq(timelock.getNextExecutableOperation(0, 0), id1);
 
         // Get the index of id1
         (bool exists, uint256 index) = timelock.getOperationIndex(id1);
@@ -1069,8 +1047,7 @@ contract TimelockTest is Test {
         _execute(address(mockTarget), 0, data, bytes32(0), keccak256("s1"));
 
         // Continue from same index, finds id3 (which was swapped from the end)
-        id = timelock.getNextExecutableOperation(index, 0);
-        assertEq(id, id3);
+        assertEq(timelock.getNextExecutableOperation(index, 0), id3);
 
         // Get index of id3
         (exists, index) = timelock.getOperationIndex(id3);
@@ -1080,8 +1057,7 @@ contract TimelockTest is Test {
         _execute(address(mockTarget), 0, data, bytes32(0), keccak256("s3"));
 
         // Continue from same index, nothing ready left
-        id = timelock.getNextExecutableOperation(index, 0);
-        assertEq(id, bytes32(0));
+        assertEq(timelock.getNextExecutableOperation(index, 0), bytes32(0));
     }
 
     function testGetOperationIndex() public {
