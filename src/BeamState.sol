@@ -20,6 +20,9 @@ contract BeamState {
 
     // --- Storage variables ---
 
+    // Note: Some of the variables defined here are for controlling the actions of the Configurator.
+    // That's why they might not have a direct apparent reason within this contract itself.
+
     mapping(address usr => uint256 allowed)                                         public wards;
     mapping(address usr => bytes32 rolesData)                                       public userRoles;
     mapping(bytes4  sig => bytes32 rolesData)                                       public actionsRoles;
@@ -183,6 +186,8 @@ contract BeamState {
     }
 
     function delRateLimits(address rateLimits_) external roleAuth {
+        // Note: it's a soft deprecation avoiding pairing it with new cBeams.
+        // Existing relationships need to be individually unset for full removal.
         rateLimits[rateLimits_] = 0;
         emit DelRateLimits(rateLimits_);
     }
@@ -193,6 +198,8 @@ contract BeamState {
     }
 
     function delController(address controller) external roleAuth {
+        // Note: it's a soft deprecation avoiding pairing it with new cBeams.
+        // Existing relationships need to be individually unset for full removal.
         controllers[controller] = 0;
         emit DelController(controller);
     }
@@ -203,6 +210,8 @@ contract BeamState {
     }
 
     function delCBeam(address cBeam) external roleAuth {
+        // Note: it's a soft deprecation avoiding pairing it with new rateLimits and controllers.
+        // Existing relationships need to be individually unset for full removal.
         cBeams[cBeam] = 0;
         emit DelCBeam(cBeam);
     }
