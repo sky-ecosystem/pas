@@ -147,7 +147,7 @@ contract Timelock is TimelockController, Pausable {
 
         // Safe: if maxIterations is 0 (no limit) or exceeds remaining operations, scan to end
         uint256 remaining = length - startIndex;
-        uint256 endIndex = (maxIterations == 0 || maxIterations > remaining) ? length : startIndex + maxIterations;
+        uint256 endIndex = (maxIterations == 0 || maxIterations >= remaining) ? length : startIndex + maxIterations;
 
         for (uint256 i = startIndex; i < endIndex; ++i) {
             bytes32 operationId = _operationIds.at(i);
