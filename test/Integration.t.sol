@@ -16,7 +16,7 @@
 
 pragma solidity ^0.8.21;
 
-import { Test } from "forge-std/Test.sol";
+import "dss-test/DssTest.sol";
 import { PASInstance } from "deploy/PASInstance.sol";
 import { PASDeploy } from "deploy/PASDeploy.sol";
 import { PASInit } from "deploy/PASInit.sol";
@@ -25,57 +25,40 @@ import { Configurator, RateLimitsLike } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { TimelockWrapper, RateLimitConfig } from "src/timelock/TimelockWrapper.sol";
 
-// Mock contract implementing RateLimits interface and controller functionality
-contract MockTarget {
-    RateLimitsLike.RateLimitData public rateLimitData;
-    uint256 public currentRateLimit;
-    bool public shouldFail;
-    bytes public lastCallData;
-
-    function setRateLimitData(
-        bytes32,
-        uint256 maxAmount,
-        uint256 slope,
-        uint256 lastAmount,
-        uint256 lastUpdated
-    ) external {
-        rateLimitData = RateLimitsLike.RateLimitData(maxAmount, slope, lastAmount, lastUpdated);
-    }
-
-    function setUnlimitedRateLimitData(bytes32) external {
-        rateLimitData = RateLimitsLike.RateLimitData(type(uint256).max, 0, type(uint256).max, block.timestamp);
-    }
-
-    function getRateLimitData(bytes32) external view returns (RateLimitsLike.RateLimitData memory) {
-        return rateLimitData;
-    }
-
-    function getCurrentRateLimit(bytes32) external view returns (uint256) {
-        return currentRateLimit;
-    }
-
-    function setCurrentRateLimit(uint256 _current) external {
-        currentRateLimit = _current;
-    }
-
-    function setShouldFail(bool _fail) external {
-        shouldFail = _fail;
-    }
-
-    // Mock controller function for testing callControllerAction
-    function controllerFunction(uint256 value) external returns (uint256) {
-        lastCallData = msg.data;
-        require(!shouldFail, "MockTarget/controller-function-failed");
-        return value * 2;
-    }
-
-    fallback() external {
-        lastCallData = msg.data;
-        require(!shouldFail, "MockTarget/fallback-failed");
-    }
+// Interface for SparkController
+interface ControllerLike {
+    function rateLimits() external view returns (address);
+    function setMintRecipient(uint32 domain, bytes32 mintRecipient) external;
+    function mintRecipients(uint32 domain) external view returns (bytes32);
+    function grantRole(bytes32 role, address account) external;
 }
 
-contract IntegrationTest is Test {
+// Extended RateLimitsLike with role management
+interface RateLimitsWithRolesLike {
+    struct RateLimitData {
+        uint256 maxAmount;
+        uint256 slope;
+        uint256 lastAmount;
+        uint256 lastUpdated;
+    }
+
+    function getRateLimitData(bytes32) external view returns (RateLimitData memory);
+    function getCurrentRateLimit(bytes32) external view returns (uint256);
+    function setRateLimitData(bytes32, uint256, uint256, uint256, uint256) external;
+    function setUnlimitedRateLimitData(bytes32) external;
+    function grantRole(bytes32 role, address account) external;
+}
+
+contract IntegrationTest is DssTest {
+
+    // Mainnet addresses
+    address constant SPARK_CONTROLLER = 0xE52d643B27601D4d2BAB2052f30cf936ed413cec;
+    address constant SPARK_PROXY      = 0x3300f198988e4C9C63F75dF86De36421f06af8c4;
+    uint256 constant FORK_BLOCK       = 24250000;
+    bytes32 constant OZ_DEFAULT_ADMIN_ROLE = bytes32(0);
+
+    // Fetched from controller
+    address public SPARK_RATE_LIMITS;
 
     PASInstance     public pas;
     BeamState       public beamState;
@@ -89,8 +72,6 @@ contract IntegrationTest is Test {
     address public canceller;
     address public pauser;
     address public cBeam;        // Mock cBeam address
-    address public rateLimits;   // Mock rate limits address
-    address public controller;   // Mock controller address
 
     uint256 public constant MIN_DELAY = 1 days;
     bytes32 public constant SALT = keccak256("integration-test");
@@ -112,14 +93,18 @@ contract IntegrationTest is Test {
     event ProposalSubmitted(bytes32 indexed operationId, string functionName);
 
     function setUp() public {
+        // Fork mainnet at specified block
+        vm.createSelectFork(vm.envString("ETH_RPC_URL"), FORK_BLOCK);
+
+        // Fetch SPARK_RATE_LIMITS from controller
+        SPARK_RATE_LIMITS = ControllerLike(SPARK_CONTROLLER).rateLimits();
+
         deployer    = address(this);
         owner       = address(0x1);
         coreCouncil = address(0x2);
         canceller   = address(0x3);
         pauser      = address(0x4);
         cBeam       = address(0x5);
-        rateLimits  = address(0x6);
-        controller  = address(0x7);
 
         // Deploy using PASDeploy
         pas = PASDeploy.deploy(deployer, owner, MIN_DELAY);
@@ -222,27 +207,27 @@ contract IntegrationTest is Test {
     function testCoreCouncilCanDelRateLimits() public {
         // Setup: owner adds rateLimits
         vm.prank(owner);
-        beamState.addRateLimits(rateLimits);
-        assertEq(beamState.rateLimits(rateLimits), 1, "rateLimits should be added");
+        beamState.addRateLimits(SPARK_RATE_LIMITS);
+        assertEq(beamState.rateLimits(SPARK_RATE_LIMITS), 1, "rateLimits should be added");
 
         // CoreCouncil can delete (role 2)
         vm.prank(coreCouncil);
-        beamState.delRateLimits(rateLimits);
+        beamState.delRateLimits(SPARK_RATE_LIMITS);
 
-        assertEq(beamState.rateLimits(rateLimits), 0, "rateLimits should be deleted");
+        assertEq(beamState.rateLimits(SPARK_RATE_LIMITS), 0, "rateLimits should be deleted");
     }
 
     function testCoreCouncilCanDelController() public {
         // Setup: owner adds controller
         vm.prank(owner);
-        beamState.addController(controller);
-        assertEq(beamState.controllers(controller), 1, "controller should be added");
+        beamState.addController(SPARK_CONTROLLER);
+        assertEq(beamState.controllers(SPARK_CONTROLLER), 1, "controller should be added");
 
         // CoreCouncil can delete (role 2)
         vm.prank(coreCouncil);
-        beamState.delController(controller);
+        beamState.delController(SPARK_CONTROLLER);
 
-        assertEq(beamState.controllers(controller), 0, "controller should be deleted");
+        assertEq(beamState.controllers(SPARK_CONTROLLER), 0, "controller should be deleted");
     }
 
     function testCoreCouncilCanDelCBeam() public {
@@ -260,36 +245,36 @@ contract IntegrationTest is Test {
     function testCoreCouncilCanSetAndUnsetCBeamForRateLimits() public {
         // Setup: owner adds rateLimits and cBeam, then sets association
         vm.startPrank(owner);
-        beamState.addRateLimits(rateLimits);
+        beamState.addRateLimits(SPARK_RATE_LIMITS);
         beamState.addCBeam(cBeam);
         vm.stopPrank();
 
         vm.prank(coreCouncil);
-        beamState.setCBeamForRateLimits(rateLimits, cBeam);
-        assertEq(beamState.rateLimitsCBeams(rateLimits, cBeam), 1, "cBeam should be set");
+        beamState.setCBeamForRateLimits(SPARK_RATE_LIMITS, cBeam);
+        assertEq(beamState.rateLimitsCBeams(SPARK_RATE_LIMITS, cBeam), 1, "cBeam should be set");
 
         // CoreCouncil can unset association (role 2)
         vm.prank(coreCouncil);
-        beamState.unsetCBeamForRateLimits(rateLimits, cBeam);
-        assertEq(beamState.rateLimitsCBeams(rateLimits, cBeam), 0, "cBeam should be unset for rateLimits");
+        beamState.unsetCBeamForRateLimits(SPARK_RATE_LIMITS, cBeam);
+        assertEq(beamState.rateLimitsCBeams(SPARK_RATE_LIMITS, cBeam), 0, "cBeam should be unset for rateLimits");
     }
 
     function testCoreCouncilCanSetAndUnsetCBeamForController() public {
         // Setup: owner adds controller and cBeam, then sets association
         vm.startPrank(owner);
-        beamState.addController(controller);
+        beamState.addController(SPARK_CONTROLLER);
         beamState.addCBeam(cBeam);
         vm.stopPrank();
 
         vm.prank(coreCouncil);
-        beamState.setCBeamForController(controller, cBeam);
-        assertEq(beamState.controllersCBeams(controller, cBeam), 1, "cBeam should be set");
+        beamState.setCBeamForController(SPARK_CONTROLLER, cBeam);
+        assertEq(beamState.controllersCBeams(SPARK_CONTROLLER, cBeam), 1, "cBeam should be set");
 
         // CoreCouncil can unset association (role 2)
         vm.prank(coreCouncil);
-        beamState.unsetCBeamForController(controller, cBeam);
+        beamState.unsetCBeamForController(SPARK_CONTROLLER, cBeam);
 
-        assertEq(beamState.controllersCBeams(controller, cBeam), 0, "cBeam should be unset for controller");
+        assertEq(beamState.controllersCBeams(SPARK_CONTROLLER, cBeam), 0, "cBeam should be unset for controller");
     }
 
     function testCoreCouncilCanDelInitRateLimits() public {
@@ -297,16 +282,16 @@ contract IntegrationTest is Test {
 
         // Setup: owner adds init rate limits
         vm.prank(owner);
-        beamState.addInitRateLimits(key, rateLimits, 1_000 ether, 100 ether);
+        beamState.addInitRateLimits(key, SPARK_RATE_LIMITS, 1_000 ether, 100 ether);
 
-        BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, rateLimits);
+        BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, SPARK_RATE_LIMITS);
         assertEq(limits.maxAmount, 1_000 ether, "maxAmount should be set");
         assertEq(limits.slope, 100 ether, "slope should be set");
 
         // CoreCouncil can delete (role 2)
         vm.prank(coreCouncil);
-        beamState.delInitRateLimits(key, rateLimits);
-        limits = beamState.getInitRateLimits(key, rateLimits);
+        beamState.delInitRateLimits(key, SPARK_RATE_LIMITS);
+        limits = beamState.getInitRateLimits(key, SPARK_RATE_LIMITS);
         assertEq(limits.maxAmount, 0, "maxAmount should be deleted");
         assertEq(limits.slope, 0, "slope should be deleted");
     }
@@ -316,14 +301,14 @@ contract IntegrationTest is Test {
 
         // Setup: owner adds init controller action
         vm.prank(owner);
-        bytes32 key = beamState.addInitControllerActions(actionData, controller);
+        bytes32 key = beamState.addInitControllerActions(actionData, SPARK_CONTROLLER);
 
-        assertTrue(beamState.isControllerActionEnabled(key, controller), "action should be enabled");
+        assertTrue(beamState.isControllerActionEnabled(key, SPARK_CONTROLLER), "action should be enabled");
 
         // CoreCouncil can delete (role 2)
         vm.prank(coreCouncil);
-        beamState.delInitControllerActions(key, controller);
-        assertFalse(beamState.isControllerActionEnabled(key, controller), "action should be disabled");
+        beamState.delInitControllerActions(key, SPARK_CONTROLLER);
+        assertFalse(beamState.isControllerActionEnabled(key, SPARK_CONTROLLER), "action should be disabled");
     }
 
     function testNonAuthorizedCannotDoRole2Actions() public {
@@ -423,11 +408,11 @@ contract IntegrationTest is Test {
         uint256 slope = 100 ether;
 
         _scheduleAndExecute(
-            abi.encodeWithSelector(BeamState.addInitRateLimits.selector, key, rateLimits, maxAmount, slope),
+            abi.encodeWithSelector(BeamState.addInitRateLimits.selector, key, SPARK_RATE_LIMITS, maxAmount, slope),
             keccak256("addInitRateLimits")
         );
 
-        BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, rateLimits);
+        BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, SPARK_RATE_LIMITS);
         assertEq(limits.maxAmount, maxAmount, "maxAmount should be set via timelock");
         assertEq(limits.slope, slope, "slope should be set via timelock");
     }
@@ -436,12 +421,12 @@ contract IntegrationTest is Test {
         bytes memory actionData = abi.encodeWithSignature("someAction(uint256)", 42);
 
         _scheduleAndExecute(
-            abi.encodeWithSelector(BeamState.addInitControllerActions.selector, actionData, controller),
+            abi.encodeWithSelector(BeamState.addInitControllerActions.selector, actionData, SPARK_CONTROLLER),
             keccak256("addInitControllerActions")
         );
 
         bytes32 key = keccak256(actionData);
-        assertTrue(beamState.isControllerActionEnabled(key, controller), "action should be enabled via timelock");
+        assertTrue(beamState.isControllerActionEnabled(key, SPARK_CONTROLLER), "action should be enabled via timelock");
     }
 
     // ============================================================================
@@ -557,7 +542,7 @@ contract IntegrationTest is Test {
 
     function testOperationsWithPredecessor() public {
         // Schedule first operation: addRateLimits
-        bytes memory payload1 = abi.encodeWithSelector(BeamState.addRateLimits.selector, rateLimits);
+        bytes memory payload1 = abi.encodeWithSelector(BeamState.addRateLimits.selector, SPARK_RATE_LIMITS);
         address[] memory targets = new address[](1);
         targets[0] = address(beamState);
         uint256[] memory values = new uint256[](1);
@@ -569,7 +554,7 @@ contract IntegrationTest is Test {
         bytes32 id1 = timelock.hashOperationBatch(targets, values, payloads1, bytes32(0), keccak256("op1"));
 
         // Schedule second operation: addController with predecessor
-        bytes memory payload2 = abi.encodeWithSelector(BeamState.addController.selector, controller);
+        bytes memory payload2 = abi.encodeWithSelector(BeamState.addController.selector, SPARK_CONTROLLER);
         bytes[] memory payloads2 = new bytes[](1);
         payloads2[0] = payload2;
 
@@ -584,11 +569,11 @@ contract IntegrationTest is Test {
 
         // Execute first
         timelock.executeBatch(targets, values, payloads1, bytes32(0), keccak256("op1"));
-        assertEq(beamState.rateLimits(rateLimits), 1, "rateLimits should be added");
+        assertEq(beamState.rateLimits(SPARK_RATE_LIMITS), 1, "rateLimits should be added");
 
         // Now execute second
         timelock.executeBatch(targets, values, payloads2, id1, keccak256("op2"));
-        assertEq(beamState.controllers(controller), 1, "controller should be added");
+        assertEq(beamState.controllers(SPARK_CONTROLLER), 1, "controller should be added");
     }
 
     // ============================================================================
@@ -602,11 +587,11 @@ contract IntegrationTest is Test {
 
         // 2. Schedule addRateLimits with predecessor
         vm.prank(coreCouncil);
-        bytes32 addRateLimitsOp = timelockWrapper.addRateLimits(rateLimits, addCBeamOp, keccak256("step2"), MIN_DELAY);
+        bytes32 addRateLimitsOp = timelockWrapper.addRateLimits(SPARK_RATE_LIMITS, addCBeamOp, keccak256("step2"), MIN_DELAY);
 
         // 3. Schedule setHop with predecessor
         vm.prank(coreCouncil);
-        bytes32 setHopOp = timelockWrapper.setHop(rateLimits, 4 hours, addRateLimitsOp, keccak256("step3"), MIN_DELAY);
+        bytes32 setHopOp = timelockWrapper.setHop(SPARK_RATE_LIMITS, 4 hours, addRateLimitsOp, keccak256("step3"), MIN_DELAY);
 
         // Wait for delay
         vm.warp(block.timestamp + MIN_DELAY);
@@ -618,16 +603,16 @@ contract IntegrationTest is Test {
 
         Timelock.Operation memory op2 = timelock.getOperation(addRateLimitsOp);
         timelock.executeBatch(op2.targets, op2.values, op2.payloads, op2.predecessor, op2.salt);
-        assertEq(beamState.rateLimits(rateLimits), 1, "rateLimits added");
+        assertEq(beamState.rateLimits(SPARK_RATE_LIMITS), 1, "rateLimits added");
 
         Timelock.Operation memory op3 = timelock.getOperation(setHopOp);
         timelock.executeBatch(op3.targets, op3.values, op3.payloads, op3.predecessor, op3.salt);
-        assertEq(beamState.getHop(rateLimits), 4 hours, "hop set");
+        assertEq(beamState.getHop(SPARK_RATE_LIMITS), 4 hours, "hop set");
 
         // 5. CoreCouncil can now directly set cBeam for rateLimits (role 2)
         vm.prank(coreCouncil);
-        beamState.setCBeamForRateLimits(rateLimits, cBeam);
-        assertEq(beamState.rateLimitsCBeams(rateLimits, cBeam), 1, "cBeam associated with rateLimits");
+        beamState.setCBeamForRateLimits(SPARK_RATE_LIMITS, cBeam);
+        assertEq(beamState.rateLimitsCBeams(SPARK_RATE_LIMITS, cBeam), 1, "cBeam associated with rateLimits");
 
         // 6. Emergency stop by coreCouncil (direct, no timelock)
         vm.prank(coreCouncil);
@@ -665,7 +650,7 @@ contract IntegrationTest is Test {
     }
 
     // ============================================================================
-    // Post-Onboarding cBeam Operations Test
+    // Post-Onboarding cBeam Operations Test with Real Contracts
     // ============================================================================
 
     function _scheduleDirect(bytes memory payload, bytes32 predecessor, bytes32 salt) internal returns (bytes32) {
@@ -682,12 +667,15 @@ contract IntegrationTest is Test {
     }
 
     function testCBeamCanOperateAfterOnboarding() public {
-        // Deploy mock targets for rateLimits and controller
-        MockTarget mockRateLimits = new MockTarget();
-        MockTarget mockController = new MockTarget();
+        bytes32 rateLimitKey = keccak256("integration-test-key");
 
-        bytes32 rateLimitKey = keccak256("test-rate-limit");
-        bytes memory controllerAction = abi.encodeWithSelector(MockTarget.controllerFunction.selector, 42);
+        // Controller action: setMintRecipient for domain 6
+        address testRecipient = address(0xDEADBEEF);
+        bytes memory setMintRecipientAction = abi.encodeWithSelector(
+            ControllerLike.setMintRecipient.selector,
+            uint32(6),  // domain
+            bytes32(uint256(uint160(testRecipient)))
+        );
 
         // ========================================
         // Phase 1: Onboard via Timelock (Role 1)
@@ -698,32 +686,32 @@ contract IntegrationTest is Test {
             vm.prank(coreCouncil);
             opIds[0] = timelockWrapper.addCBeam(cBeam, bytes32(0), keccak256("addCBeam"), MIN_DELAY);
 
-            // 1b. Schedule addRateLimits for mock target
+            // 1b. Schedule addRateLimits for SPARK_RATE_LIMITS
             vm.prank(coreCouncil);
-            opIds[1] = timelockWrapper.addRateLimits(address(mockRateLimits), opIds[0], keccak256("addRateLimits"), MIN_DELAY);
+            opIds[1] = timelockWrapper.addRateLimits(SPARK_RATE_LIMITS, opIds[0], keccak256("addRateLimits"), MIN_DELAY);
 
-            // 1c. Schedule addController for mock target
+            // 1c. Schedule addController for SPARK_CONTROLLER
             vm.prank(coreCouncil);
-            opIds[2] = timelockWrapper.addController(address(mockController), opIds[1], keccak256("addController"), MIN_DELAY);
+            opIds[2] = timelockWrapper.addController(SPARK_CONTROLLER, opIds[1], keccak256("addController"), MIN_DELAY);
 
             // 1d. Schedule setHop for rateLimits
             vm.prank(coreCouncil);
-            opIds[3] = timelockWrapper.setHop(address(mockRateLimits), 1 hours, opIds[2], keccak256("setHop"), MIN_DELAY);
+            opIds[3] = timelockWrapper.setHop(SPARK_RATE_LIMITS, 1 hours, opIds[2], keccak256("setHop"), MIN_DELAY);
 
             // 1e. Schedule setMaxChange for rateLimits
             vm.prank(coreCouncil);
-            opIds[4] = timelockWrapper.setMaxChange(address(mockRateLimits), 2 ether, opIds[3], keccak256("setMaxChange"), MIN_DELAY);
+            opIds[4] = timelockWrapper.setMaxChange(SPARK_RATE_LIMITS, 2 ether, opIds[3], keccak256("setMaxChange"), MIN_DELAY);
 
             // 1f. Schedule addInitRateLimits (via wrapper with RateLimitConfig)
             vm.prank(coreCouncil);
             opIds[5] = timelockWrapper.addInitRateLimits(
-                RateLimitConfig({key: rateLimitKey, rateLimits: address(mockRateLimits), maxAmount: 1_000 ether, slope: 100 ether}),
+                RateLimitConfig({key: rateLimitKey, rateLimits: SPARK_RATE_LIMITS, maxAmount: 1_000_000e18, slope: 100_000e18}),
                 opIds[4], keccak256("addInitRateLimits"), MIN_DELAY
             );
 
             // 1g. Schedule addInitControllerActions (directly via timelock - no wrapper for generic actions)
             opIds[6] = _scheduleDirect(
-                abi.encodeWithSelector(BeamState.addInitControllerActions.selector, controllerAction, address(mockController)),
+                abi.encodeWithSelector(BeamState.addInitControllerActions.selector, setMintRecipientAction, SPARK_CONTROLLER),
                 opIds[5], keccak256("addInitControllerActions")
             );
         }
@@ -739,46 +727,56 @@ contract IntegrationTest is Test {
 
         // Verify onboarding results
         assertEq(beamState.cBeams(cBeam), 1, "cBeam should be added");
-        assertEq(beamState.rateLimits(address(mockRateLimits)), 1, "rateLimits should be added");
-        assertEq(beamState.controllers(address(mockController)), 1, "controller should be added");
-        assertEq(beamState.getHop(address(mockRateLimits)), 1 hours, "hop should be set");
-        assertEq(beamState.getMaxChange(address(mockRateLimits)), 2 ether, "maxChange should be set");
+        assertEq(beamState.rateLimits(SPARK_RATE_LIMITS), 1, "rateLimits should be added");
+        assertEq(beamState.controllers(SPARK_CONTROLLER), 1, "controller should be added");
+        assertEq(beamState.getHop(SPARK_RATE_LIMITS), 1 hours, "hop should be set");
+        assertEq(beamState.getMaxChange(SPARK_RATE_LIMITS), 2 ether, "maxChange should be set");
         {
-            BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(rateLimitKey, address(mockRateLimits));
-            assertEq(limits.maxAmount, 1_000 ether, "init rate limit maxAmount should be set");
-            assertEq(limits.slope, 100 ether, "init rate limit slope should be set");
+            BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(rateLimitKey, SPARK_RATE_LIMITS);
+            assertEq(limits.maxAmount, 1_000_000e18, "init rate limit maxAmount should be set");
+            assertEq(limits.slope, 100_000e18, "init rate limit slope should be set");
         }
-        assertTrue(beamState.isControllerActionEnabled(keccak256(controllerAction), address(mockController)), "controller action should be enabled");
+        assertTrue(beamState.isControllerActionEnabled(keccak256(setMintRecipientAction), SPARK_CONTROLLER), "controller action should be enabled");
 
         // ========================================
-        // Phase 2: Associate cBeam (Role 2 - direct)
+        // Phase 2: Grant admin role to configurator and associate cBeam (Role 2 - direct)
         // ========================================
 
-        vm.startPrank(coreCouncil);
-        beamState.setCBeamForRateLimits(address(mockRateLimits), cBeam);
-        beamState.setCBeamForController(address(mockController), cBeam);
+        // Grant OZ_DEFAULT_ADMIN_ROLE to configurator on both controller and rate limits
+        // This allows configurator to call functions on these contracts
+        vm.startPrank(SPARK_PROXY);
+        ControllerLike(SPARK_CONTROLLER).grantRole(OZ_DEFAULT_ADMIN_ROLE, address(configurator));
+        RateLimitsWithRolesLike(SPARK_RATE_LIMITS).grantRole(OZ_DEFAULT_ADMIN_ROLE, address(configurator));
         vm.stopPrank();
 
-        assertEq(beamState.rateLimitsCBeams(address(mockRateLimits), cBeam), 1, "cBeam should be associated with rateLimits");
-        assertEq(beamState.controllersCBeams(address(mockController), cBeam), 1, "cBeam should be associated with controller");
+        vm.startPrank(coreCouncil);
+        beamState.setCBeamForRateLimits(SPARK_RATE_LIMITS, cBeam);
+        beamState.setCBeamForController(SPARK_CONTROLLER, cBeam);
+        vm.stopPrank();
+
+        assertEq(beamState.rateLimitsCBeams(SPARK_RATE_LIMITS, cBeam), 1, "cBeam should be associated with rateLimits");
+        assertEq(beamState.controllersCBeams(SPARK_CONTROLLER, cBeam), 1, "cBeam should be associated with controller");
 
         // ========================================
         // Phase 3: cBeam operates via Configurator
         // ========================================
 
-        // 3a. cBeam sets rate limit (within default limits - no hop needed)
+        // 3a. cBeam sets rate limit
         vm.prank(cBeam);
-        configurator.setRateLimit(address(mockRateLimits), rateLimitKey, 500 ether, 50 ether);
+        configurator.setRateLimit(SPARK_RATE_LIMITS, rateLimitKey, 500_000e18, 50_000e18);
         {
-            RateLimitsLike.RateLimitData memory data = mockRateLimits.getRateLimitData(rateLimitKey);
-            assertEq(data.maxAmount, 500 ether, "rate limit maxAmount should be set by cBeam");
-            assertEq(data.slope, 50 ether, "rate limit slope should be set by cBeam");
+            RateLimitsLike.RateLimitData memory data = RateLimitsLike(SPARK_RATE_LIMITS).getRateLimitData(rateLimitKey);
+            assertEq(data.maxAmount, 500_000e18, "rate limit maxAmount should be set by cBeam on real contract");
+            assertEq(data.slope, 50_000e18, "rate limit slope should be set by cBeam on real contract");
         }
 
         // 3b. cBeam calls controller action
         vm.prank(cBeam);
-        configurator.callControllerAction(address(mockController), controllerAction);
-        assertEq(mockController.lastCallData(), controllerAction, "controller should have received the action");
+        configurator.callControllerAction(SPARK_CONTROLLER, setMintRecipientAction);
+
+        // Verify
+        bytes32 expectedRecipient = bytes32(uint256(uint160(testRecipient)));
+        assertEq(ControllerLike(SPARK_CONTROLLER).mintRecipients(6), expectedRecipient, "mintRecipient should be set on real controller");
 
         // ========================================
         // Phase 4: Verify restrictions
@@ -788,18 +786,22 @@ contract IntegrationTest is Test {
         address unauthorizedCBeam = address(0x999);
         vm.prank(unauthorizedCBeam);
         vm.expectRevert("Configurator/not-authorized-ratelimits-cBeam");
-        configurator.setRateLimit(address(mockRateLimits), rateLimitKey, 100 ether, 10 ether);
+        configurator.setRateLimit(SPARK_RATE_LIMITS, rateLimitKey, 100_000e18, 10_000e18);
 
         // 4b. Unauthorized cBeam cannot call controller action
         vm.prank(unauthorizedCBeam);
         vm.expectRevert("Configurator/not-authorized-controller-cBeam");
-        configurator.callControllerAction(address(mockController), controllerAction);
+        configurator.callControllerAction(SPARK_CONTROLLER, setMintRecipientAction);
 
         // 4c. cBeam cannot call non-whitelisted action
-        bytes memory nonWhitelistedAction = abi.encodeWithSelector(MockTarget.controllerFunction.selector, 999);
+        bytes memory nonWhitelistedAction = abi.encodeWithSelector(
+            ControllerLike.setMintRecipient.selector,
+            uint32(7),  // different domain
+            bytes32(uint256(uint160(testRecipient)))
+        );
         vm.prank(cBeam);
         vm.expectRevert("Configurator/not-valid-data");
-        configurator.callControllerAction(address(mockController), nonWhitelistedAction);
+        configurator.callControllerAction(SPARK_CONTROLLER, nonWhitelistedAction);
 
         // 4d. Operations blocked when stopped
         vm.prank(coreCouncil);
@@ -807,11 +809,11 @@ contract IntegrationTest is Test {
 
         vm.prank(cBeam);
         vm.expectRevert("Configurator/stopped");
-        configurator.setRateLimit(address(mockRateLimits), rateLimitKey, 400 ether, 40 ether);
+        configurator.setRateLimit(SPARK_RATE_LIMITS, rateLimitKey, 400_000e18, 40_000e18);
 
         vm.prank(cBeam);
         vm.expectRevert("Configurator/stopped");
-        configurator.callControllerAction(address(mockController), controllerAction);
+        configurator.callControllerAction(SPARK_CONTROLLER, setMintRecipientAction);
 
         // 4e. Operations resume after restart (via timelock)
         vm.prank(coreCouncil);
@@ -825,12 +827,12 @@ contract IntegrationTest is Test {
 
         assertFalse(beamState.stopped(), "system should be running");
 
-        // cBeam can operate again
+        // cBeam can operate again on real contracts
         vm.prank(cBeam);
-        configurator.setRateLimit(address(mockRateLimits), rateLimitKey, 400 ether, 40 ether);
+        configurator.setRateLimit(SPARK_RATE_LIMITS, rateLimitKey, 400_000e18, 40_000e18);
         {
-            RateLimitsLike.RateLimitData memory data = mockRateLimits.getRateLimitData(rateLimitKey);
-            assertEq(data.maxAmount, 400 ether, "rate limit should be updated after restart");
+            RateLimitsLike.RateLimitData memory data = RateLimitsLike(SPARK_RATE_LIMITS).getRateLimitData(rateLimitKey);
+            assertEq(data.maxAmount, 400_000e18, "rate limit should be updated after restart on real contract");
         }
     }
 }
