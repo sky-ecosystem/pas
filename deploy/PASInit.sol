@@ -16,6 +16,7 @@
 
 pragma solidity >=0.8.0;
 
+import { DssInstance } from "dss-test/MCD.sol";
 import { PASInstance } from "./PASInstance.sol";
 
 interface BeamStateLike {
@@ -63,6 +64,7 @@ library PASInit {
     uint256 constant internal WAD = 10**18;
 
     function init(
+        DssInstance memory dss,
         PASInstance memory pasInstance,
         uint256            minDelay,
         address            coreCouncil,
@@ -121,5 +123,11 @@ library PASInit {
             timelock.grantRole(timelock.PAUSER_ROLE(), pausers[i]);
         }
         timelockWrapper.kiss(coreCouncil);
+
+        // --- Chainlog ---
+
+        dss.chainlog.setAddress("PAS_STATE",        address(beamState));
+        dss.chainlog.setAddress("PAS_CONFIGURATOR", address(configurator));
+        dss.chainlog.setAddress("PAS_TIMELOCK",     address(timelock));
     }
 }

@@ -17,6 +17,7 @@
 pragma solidity ^0.8.21;
 
 import "dss-test/DssTest.sol";
+import { MCD, DssInstance } from "dss-test/MCD.sol";
 import { PASInstance } from "deploy/PASInstance.sol";
 import { PASDeploy } from "deploy/PASDeploy.sol";
 import { PASInit } from "deploy/PASInit.sol";
@@ -54,27 +55,28 @@ contract IntegrationTest is DssTest {
     // Mainnet addresses
     address constant SPARK_CONTROLLER = 0xE52d643B27601D4d2BAB2052f30cf936ed413cec;
     address constant SPARK_PROXY      = 0x3300f198988e4C9C63F75dF86De36421f06af8c4;
+    address constant CHAINLOG         = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
     uint256 constant FORK_BLOCK       = 24250000;
     bytes32 constant OZ_DEFAULT_ADMIN_ROLE = bytes32(0);
 
     // Fetched from controller
-    address public SPARK_RATE_LIMITS;
+    address SPARK_RATE_LIMITS;
 
-    PASInstance     public pas;
-    BeamState       public beamState;
-    Configurator    public configurator;
-    Timelock        public timelock;
-    TimelockWrapper public timelockWrapper;
+    DssInstance     dss;
+    PASInstance     pas;
+    BeamState       beamState;
+    Configurator    configurator;
+    Timelock        timelock;
+    TimelockWrapper timelockWrapper;
 
-    address public deployer;
-    address public owner;        // Timelock admin
-    address public coreCouncil;  // Has role 2 on BeamState, proposer/canceller on Timelock
-    address public canceller;
-    address public pauser;
-    address public cBeam;        // Mock cBeam address
+    address pauseProxy;   // Timelock admin
+    address coreCouncil;  // Has role 2 on BeamState, proposer/canceller on Timelock
+    address canceller;
+    address pauser;
+    address cBeam;        // Mock cBeam address
 
-    uint256 public constant MIN_DELAY = 1 days;
-    bytes32 public constant SALT = keccak256("integration-test");
+    uint256 constant MIN_DELAY = 1 days;
+    bytes32 constant SALT = keccak256("integration-test");
 
     // Events
     event CallScheduled(
@@ -96,18 +98,21 @@ contract IntegrationTest is DssTest {
         // Fork mainnet at specified block
         vm.createSelectFork(vm.envString("ETH_RPC_URL"), FORK_BLOCK);
 
+        // Load DssInstance from chainlog
+        dss = MCD.loadFromChainlog(CHAINLOG);
+
         // Fetch SPARK_RATE_LIMITS from controller
         SPARK_RATE_LIMITS = ControllerLike(SPARK_CONTROLLER).rateLimits();
 
-        deployer    = address(this);
-        owner       = address(0x1);
-        coreCouncil = address(0x2);
-        canceller   = address(0x3);
-        pauser      = address(0x4);
-        cBeam       = address(0x5);
+        pauseProxy = dss.chainlog.getAddress("MCD_PAUSE_PROXY");
+
+        coreCouncil = address(0x1);
+        canceller   = address(0x2);
+        pauser      = address(0x3);
+        cBeam       = address(0x4);
 
         // Deploy using PASDeploy
-        pas = PASDeploy.deploy(deployer, owner, MIN_DELAY);
+        pas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
 
         // Cast to typed contracts
         beamState       = BeamState(pas.beamState);
@@ -115,15 +120,15 @@ contract IntegrationTest is DssTest {
         timelock        = Timelock(payable(pas.timelock));
         timelockWrapper = TimelockWrapper(pas.timelockWrapper);
 
-        // Initialize using PASInit (must be called by owner who has auth on BeamState and Timelock)
+        // Initialize using PASInit (must be called by pauseProxy who has auth on BeamState and Timelock)
         address[] memory cancellers = new address[](1);
         cancellers[0] = canceller;
 
         address[] memory pausers = new address[](1);
         pausers[0] = pauser;
 
-        vm.startPrank(owner);
-        PASInit.init(pas, MIN_DELAY, coreCouncil, cancellers, pausers);
+        vm.startPrank(pauseProxy);
+        PASInit.init(dss, pas, MIN_DELAY, coreCouncil, cancellers, pausers);
         vm.stopPrank();
     }
 
@@ -147,8 +152,14 @@ contract IntegrationTest is DssTest {
         assertEq(address(timelockWrapper.beamState()), address(beamState), "wrapper should reference beamState");
     }
 
+    function testChainlogEntriesAfterInit() public view {
+        assertEq(dss.chainlog.getAddress("PAS_STATE"), address(beamState), "PAS_STATE should be set in chainlog");
+        assertEq(dss.chainlog.getAddress("PAS_CONFIGURATOR"), address(configurator), "PAS_CONFIGURATOR should be set in chainlog");
+        assertEq(dss.chainlog.getAddress("PAS_TIMELOCK"), address(timelock), "PAS_TIMELOCK should be set in chainlog");
+    }
+
     function testTimelockRolesAfterInit() public view {
-        assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), owner), "owner should be admin");
+        assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), pauseProxy), "pauseProxy should be admin");
         assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should be proposer");
         assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), address(timelockWrapper)), "wrapper should be proposer");
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), coreCouncil), "coreCouncil should be canceller");
@@ -205,8 +216,8 @@ contract IntegrationTest is DssTest {
     }
 
     function testCoreCouncilCanDelRateLimits() public {
-        // Setup: owner adds rateLimits
-        vm.prank(owner);
+        // Setup: pauseProxy adds rateLimits
+        vm.prank(pauseProxy);
         beamState.addRateLimits(SPARK_RATE_LIMITS);
         assertEq(beamState.rateLimits(SPARK_RATE_LIMITS), 1, "rateLimits should be added");
 
@@ -218,8 +229,8 @@ contract IntegrationTest is DssTest {
     }
 
     function testCoreCouncilCanDelController() public {
-        // Setup: owner adds controller
-        vm.prank(owner);
+        // Setup: pauseProxy adds controller
+        vm.prank(pauseProxy);
         beamState.addController(SPARK_CONTROLLER);
         assertEq(beamState.controllers(SPARK_CONTROLLER), 1, "controller should be added");
 
@@ -231,8 +242,8 @@ contract IntegrationTest is DssTest {
     }
 
     function testCoreCouncilCanDelCBeam() public {
-        // Owner adds cBeam directly (has auth/wards)
-        vm.prank(owner);
+        // pauseProxy adds cBeam directly (has auth/wards)
+        vm.prank(pauseProxy);
         beamState.addCBeam(cBeam);
         assertEq(beamState.cBeams(cBeam), 1, "cBeam should be added");
 
@@ -243,8 +254,8 @@ contract IntegrationTest is DssTest {
     }
 
     function testCoreCouncilCanSetAndUnsetCBeamForRateLimits() public {
-        // Setup: owner adds rateLimits and cBeam, then sets association
-        vm.startPrank(owner);
+        // Setup: pauseProxy adds rateLimits and cBeam, then sets association
+        vm.startPrank(pauseProxy);
         beamState.addRateLimits(SPARK_RATE_LIMITS);
         beamState.addCBeam(cBeam);
         vm.stopPrank();
@@ -260,8 +271,8 @@ contract IntegrationTest is DssTest {
     }
 
     function testCoreCouncilCanSetAndUnsetCBeamForController() public {
-        // Setup: owner adds controller and cBeam, then sets association
-        vm.startPrank(owner);
+        // Setup: pauseProxy adds controller and cBeam, then sets association
+        vm.startPrank(pauseProxy);
         beamState.addController(SPARK_CONTROLLER);
         beamState.addCBeam(cBeam);
         vm.stopPrank();
@@ -280,8 +291,8 @@ contract IntegrationTest is DssTest {
     function testCoreCouncilCanDelInitRateLimits() public {
         bytes32 key = keccak256("test-rate-limit-key");
 
-        // Setup: owner adds init rate limits
-        vm.prank(owner);
+        // Setup: pauseProxy adds init rate limits
+        vm.prank(pauseProxy);
         beamState.addInitRateLimits(key, SPARK_RATE_LIMITS, 1_000 ether, 100 ether);
 
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, SPARK_RATE_LIMITS);
@@ -299,8 +310,8 @@ contract IntegrationTest is DssTest {
     function testCoreCouncilCanDelInitControllerActions() public {
         bytes memory actionData = abi.encodeWithSignature("someAction(uint256)", 42);
 
-        // Setup: owner adds init controller action
-        vm.prank(owner);
+        // Setup: pauseProxy adds init controller action
+        vm.prank(pauseProxy);
         bytes32 key = beamState.addInitControllerActions(actionData, SPARK_CONTROLLER);
 
         assertTrue(beamState.isControllerActionEnabled(key, SPARK_CONTROLLER), "action should be enabled");
@@ -521,7 +532,7 @@ contract IntegrationTest is DssTest {
         vm.prank(pauser);
         timelock.pause();
 
-        vm.prank(owner);
+        vm.prank(pauseProxy);
         timelock.unpause();
 
         assertFalse(timelock.paused(), "timelock should be unpaused");
@@ -637,7 +648,7 @@ contract IntegrationTest is DssTest {
     function testAdminCanChangeDelayImmediately() public {
         uint256 newDelay = 2 days;
 
-        vm.prank(owner);
+        vm.prank(pauseProxy);
         timelock.updateDelayImmediately(newDelay);
 
         assertEq(timelock.getMinDelay(), newDelay, "delay should be updated immediately");

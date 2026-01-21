@@ -17,6 +17,7 @@
 pragma solidity ^0.8.21;
 
 import "dss-test/DssTest.sol";
+import { MCD, DssInstance } from "dss-test/MCD.sol";
 import { TimelockWrapper, RateLimitConfig } from "src/timelock/TimelockWrapper.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { BeamState } from "src/BeamState.sol";
@@ -66,26 +67,34 @@ contract TimelockWrapperTest is DssTest {
     address constant GROVE_CONTROLLER = 0xfd9dEA9a8D5B955649579Af482DB7198A392A9F5;
     address constant GROVE_PROXY      = 0x1369f7b2b38c76B6478c0f0E66D94923421891Ba;
 
+    address constant CHAINLOG         = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
+
     uint256 constant FORK_BLOCK = 24250000;
     uint256 constant MIN_DELAY  = 1 days;
 
     bytes32 constant OZ_DEFAULT_ADMIN_ROLE = bytes32(0);
 
+    DssInstance dss;
+
     // --- Fetched from controllers ---
-    address public SPARK_RATE_LIMITS;
-    address public GROVE_RATE_LIMITS;
+    address SPARK_RATE_LIMITS;
+    address GROVE_RATE_LIMITS;
 
     // --- PAS Instance ---
-    BeamState       public beamState;
-    Configurator    public configurator;
-    Timelock        public timelock;
-    TimelockWrapper public wrapper;
+    BeamState       beamState;
+    Configurator    configurator;
+    Timelock        timelock;
+    TimelockWrapper wrapper;
 
-    address public coreCouncil;
-    address public cBeam;
+    address pauseProxy;
+    address coreCouncil;
+    address cBeam;
 
     function setUp() public {
         vm.createSelectFork(vm.envString("ETH_RPC_URL"), FORK_BLOCK);
+
+        // Load DssInstance from chainlog
+        dss = MCD.loadFromChainlog(CHAINLOG);
 
         // Fetch rate limits from controllers
         SPARK_RATE_LIMITS = ControllerLike(SPARK_CONTROLLER).rateLimits();
@@ -94,8 +103,13 @@ contract TimelockWrapperTest is DssTest {
         coreCouncil = makeAddr("coreCouncil");
         cBeam       = makeAddr("cBeam");
 
-        PASInstance memory pas = PASDeploy.deploy(address(this), address(this), MIN_DELAY);
-        PASInit.init(pas, MIN_DELAY, coreCouncil, new address[](0), new address[](0));
+        pauseProxy = dss.chainlog.getAddress("MCD_PAUSE_PROXY");
+
+        PASInstance memory pas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
+
+        vm.startPrank(pauseProxy);
+        PASInit.init(dss, pas, MIN_DELAY, coreCouncil, new address[](0), new address[](0));
+        vm.stopPrank();
 
         beamState    = BeamState(pas.beamState);
         configurator = Configurator(pas.configurator);
@@ -183,6 +197,7 @@ contract TimelockWrapperTest is DssTest {
     function testKissDiss() public {
         address usr = makeAddr("usr");
 
+        vm.startPrank(pauseProxy);
         assertEq(wrapper.buds(usr), 0);
         vm.expectEmit(true, false, false, true);
         emit Kiss(usr);
@@ -192,6 +207,7 @@ contract TimelockWrapperTest is DssTest {
         emit Diss(usr);
         wrapper.diss(usr);
         assertEq(wrapper.buds(usr), 0);
+        vm.stopPrank();
     }
 
     function testAuthModifiers() public {
