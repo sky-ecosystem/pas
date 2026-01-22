@@ -22,35 +22,35 @@ import { BeamState } from "../src/BeamState.sol";
 
 // Mock TARGET contract implementing RateLimits interface
 contract MockTarget {
-    RateLimitsLike.RateLimitData public rateLimitData;
-    uint256 public currentRateLimit;
+    mapping(bytes32 key => RateLimitsLike.RateLimitData) public rateLimitData;
+    mapping(bytes32 key => uint256) public currentRateLimit;
     bool public shouldFail;
     bytes public lastCallData;
 
     function setRateLimitData(
-        bytes32,
+        bytes32 key,
         uint256 maxAmount,
         uint256 slope,
         uint256 lastAmount,
         uint256 lastUpdated
     ) external {
-        rateLimitData = RateLimitsLike.RateLimitData(maxAmount, slope, lastAmount, lastUpdated);
+        rateLimitData[key] = RateLimitsLike.RateLimitData(maxAmount, slope, lastAmount, lastUpdated);
     }
 
-    function setUnlimitedRateLimitData(bytes32) external {
-        rateLimitData = RateLimitsLike.RateLimitData(type(uint256).max, 0, type(uint256).max, block.timestamp);
+    function setUnlimitedRateLimitData(bytes32 key) external {
+        rateLimitData[key] = RateLimitsLike.RateLimitData(type(uint256).max, 0, type(uint256).max, block.timestamp);
     }
 
-    function getRateLimitData(bytes32) external view returns (RateLimitsLike.RateLimitData memory) {
-        return rateLimitData;
+    function getRateLimitData(bytes32 key) external view returns (RateLimitsLike.RateLimitData memory) {
+        return rateLimitData[key];
     }
 
-    function getCurrentRateLimit(bytes32) external view returns (uint256) {
-        return currentRateLimit;
+    function getCurrentRateLimit(bytes32 key) external view returns (uint256) {
+        return currentRateLimit[key];
     }
 
-    function setCurrentRateLimit(uint256 _current) external {
-        currentRateLimit = _current;
+    function setCurrentRateLimit(bytes32 key, uint256 _current) external {
+        currentRateLimit[key] = _current;
     }
 
     function setShouldFail(bool _fail) external {
@@ -121,7 +121,7 @@ contract ConfiguratorTest is DssTest {
         uint256 lastUpdated
     ) internal {
         target.setRateLimitData(key, maxAmount, slope, lastAmount, lastUpdated);
-        target.setCurrentRateLimit(lastAmount);
+        target.setCurrentRateLimit(key, lastAmount);
     }
 
     function _setupDefaultRateLimits(bytes32 key, address target, uint256 maxAmount, uint256 slope) internal {
@@ -400,7 +400,7 @@ contract ConfiguratorTest is DssTest {
         _setupCBeam(address(target1), CBEAM1);
         _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
         _setupRateLimitData(target1, key, 2_000 * WAD, 20 * WAD, 1_500 * WAD, block.timestamp);
-        target1.setCurrentRateLimit(1_500 * WAD);
+        target1.setCurrentRateLimit(key, 1_500 * WAD);
 
         // Decrease maxAmount below current lastAmount
         vm.prank(CBEAM1);
@@ -415,7 +415,7 @@ contract ConfiguratorTest is DssTest {
         _setupCBeam(address(target1), CBEAM1);
         _setupDefaultRateLimits(key, address(target1), 2_000 * WAD, 20 * WAD);
         _setupRateLimitData(target1, key, 1_000 * WAD, 10 * WAD, 500 * WAD, block.timestamp);
-        target1.setCurrentRateLimit(500 * WAD);
+        target1.setCurrentRateLimit(key, 500 * WAD);
 
         // Increase maxAmount
         vm.prank(CBEAM1);

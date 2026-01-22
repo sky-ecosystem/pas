@@ -97,12 +97,13 @@ contract Configurator {
             emit SetRateLimit(rateLimits, key, type(uint256).max, 0);
         } else {
             RateLimitsLike.RateLimitData memory current = RateLimitsLike(rateLimits).getRateLimitData(key);
-            bool safe = maxAmount <= defMaxAmount && slope <= defSlope || maxAmount <= current.maxAmount && slope <= current.slope;
+            bool withinCurrent = maxAmount <= current.maxAmount && slope <= current.slope;
+            bool safe = maxAmount <= defMaxAmount && slope <= defSlope || withinCurrent;
             uint256 maxChange = beamState.getMaxChange(rateLimits);
             require(safe || block.timestamp >= zzz[rateLimits][key] + beamState.getHop(rateLimits), "Configurator/increment-too-soon");
             require(safe || maxAmount <= current.maxAmount * maxChange / WAD, "Configurator/maxChange-maxAmount"); // maxChange always >= WAD
             require(safe || slope <= current.slope * maxChange / WAD, "Configurator/maxChange-slope");
-            if (maxAmount >= current.maxAmount || slope >= current.slope) {
+            if (!withinCurrent) {
                 zzz[rateLimits][key] = block.timestamp;
             }
             uint256 lastAmount = RateLimitsLike(rateLimits).getCurrentRateLimit(key);
