@@ -185,6 +185,82 @@ contract BeamStateTest is DssTest {
         beamState.setHop(TARGET1, 100);
     }
 
+    // --- Stop/Start Tests ---
+
+    function testStop() public {
+        assertFalse(beamState.stopped(), "BeamState should not be stopped initially");
+
+        vm.expectEmit();
+        emit Stop();
+        beamState.stop();
+
+        assertTrue(beamState.stopped(), "BeamState should be stopped after calling stop");
+    }
+
+    function testStopRoleAuth() public {
+        beamState.setRoleAction(7, beamState.stop.selector, true);
+        beamState.setUserRole(USER1, 7, true);
+
+        vm.prank(USER1);
+        beamState.stop();
+
+        assertTrue(beamState.stopped(), "BeamState should be stopped by role user");
+    }
+
+    function testStopNotAuthorized() public {
+        vm.prank(USER1);
+        vm.expectRevert("BeamState/role-not-authorized");
+        beamState.stop();
+    }
+
+    function testStart() public {
+        beamState.stop();
+        assertTrue(beamState.stopped(), "BeamState should be stopped");
+
+        vm.expectEmit();
+        emit Start();
+        beamState.start();
+
+        assertFalse(beamState.stopped(), "BeamState should not be stopped after calling start");
+    }
+
+    function testStartRoleAuth() public {
+        beamState.stop();
+
+        beamState.setRoleAction(7, beamState.start.selector, true);
+        beamState.setUserRole(USER1, 7, true);
+
+        vm.prank(USER1);
+        beamState.start();
+
+        assertFalse(beamState.stopped(), "BeamState should be started by role user");
+    }
+
+    function testStartNotAuthorized() public {
+        beamState.stop();
+
+        vm.prank(USER1);
+        vm.expectRevert("BeamState/role-not-authorized");
+        beamState.start();
+    }
+
+    function testMultipleStopCalls() public {
+        beamState.stop();
+        assertTrue(beamState.stopped(), "BeamState should be stopped");
+
+        // Calling stop again should not revert
+        beamState.stop();
+        assertTrue(beamState.stopped(), "BeamState should still be stopped");
+    }
+
+    function testMultipleStartCalls() public {
+        assertFalse(beamState.stopped(), "BeamState should not be stopped initially");
+
+        // Calling start when not stopped should not revert
+        beamState.start();
+        assertFalse(beamState.stopped(), "BeamState should still not be stopped");
+    }
+
     // --- Hop Configuration Tests ---
 
     function testSetHop() public {
@@ -271,51 +347,6 @@ contract BeamStateTest is DssTest {
         beamState.setMaxChange(TARGET1, 2 * WAD);
 
         assertEq(beamState.maxChange(TARGET1), 2 * WAD, "maxChange should be set by role user");
-    }
-
-    // --- cBeam Management Tests ---
-
-    function testAddCBeam() public {
-        assertEq(beamState.cBeams(CBEAM1), 0, "CBEAM1 should not be registered initially");
-
-        vm.expectEmit();
-        emit AddCBeam(CBEAM1);
-        beamState.addCBeam(CBEAM1);
-
-        assertEq(beamState.cBeams(CBEAM1), 1, "CBEAM1 should be registered");
-    }
-
-    function testAddCBeamRoleAuth() public {
-        beamState.setRoleAction(3, beamState.addCBeam.selector, true);
-        beamState.setUserRole(USER1, 3, true);
-
-        vm.prank(USER1);
-        beamState.addCBeam(CBEAM1);
-
-        assertEq(beamState.cBeams(CBEAM1), 1, "CBEAM1 should be registered by role user");
-    }
-
-    function testDelCBeam() public {
-        beamState.addCBeam(CBEAM1);
-        assertEq(beamState.cBeams(CBEAM1), 1, "CBEAM1 should be registered");
-
-        vm.expectEmit();
-        emit DelCBeam(CBEAM1);
-        beamState.delCBeam(CBEAM1);
-
-        assertEq(beamState.cBeams(CBEAM1), 0, "CBEAM1 should not be registered after delete");
-    }
-
-    function testDelCBeamRoleAuth() public {
-        beamState.addCBeam(CBEAM1);
-
-        beamState.setRoleAction(3, beamState.delCBeam.selector, true);
-        beamState.setUserRole(USER1, 3, true);
-
-        vm.prank(USER1);
-        beamState.delCBeam(CBEAM1);
-
-        assertEq(beamState.cBeams(CBEAM1), 0, "CBEAM1 should be deleted by role user");
     }
 
     // --- RateLimits Management Tests ---
@@ -422,6 +453,51 @@ contract BeamStateTest is DssTest {
 
         assertEq(beamState.controllers(TARGET1), 1, "TARGET1 should be registered");
         assertEq(beamState.controllers(TARGET2), 1, "TARGET2 should be registered");
+    }
+
+    // --- cBeam Management Tests ---
+
+    function testAddCBeam() public {
+        assertEq(beamState.cBeams(CBEAM1), 0, "CBEAM1 should not be registered initially");
+
+        vm.expectEmit();
+        emit AddCBeam(CBEAM1);
+        beamState.addCBeam(CBEAM1);
+
+        assertEq(beamState.cBeams(CBEAM1), 1, "CBEAM1 should be registered");
+    }
+
+    function testAddCBeamRoleAuth() public {
+        beamState.setRoleAction(3, beamState.addCBeam.selector, true);
+        beamState.setUserRole(USER1, 3, true);
+
+        vm.prank(USER1);
+        beamState.addCBeam(CBEAM1);
+
+        assertEq(beamState.cBeams(CBEAM1), 1, "CBEAM1 should be registered by role user");
+    }
+
+    function testDelCBeam() public {
+        beamState.addCBeam(CBEAM1);
+        assertEq(beamState.cBeams(CBEAM1), 1, "CBEAM1 should be registered");
+
+        vm.expectEmit();
+        emit DelCBeam(CBEAM1);
+        beamState.delCBeam(CBEAM1);
+
+        assertEq(beamState.cBeams(CBEAM1), 0, "CBEAM1 should not be registered after delete");
+    }
+
+    function testDelCBeamRoleAuth() public {
+        beamState.addCBeam(CBEAM1);
+
+        beamState.setRoleAction(3, beamState.delCBeam.selector, true);
+        beamState.setUserRole(USER1, 3, true);
+
+        vm.prank(USER1);
+        beamState.delCBeam(CBEAM1);
+
+        assertEq(beamState.cBeams(CBEAM1), 0, "CBEAM1 should be deleted by role user");
     }
 
     // --- cBeam-RateLimits Mapping Tests ---
@@ -841,81 +917,5 @@ contract BeamStateTest is DssTest {
         limits = beamState.getInitRateLimits(key, TARGET2);
         assertEq(limits.maxAmount, type(uint256).max, "TARGET2 should fallback to global unlimited maxAmount");
         assertEq(limits.slope, 0, "TARGET2 should fallback to global slope of 0 for unlimited");
-    }
-
-    // --- Stop/Start Tests ---
-
-    function testStop() public {
-        assertFalse(beamState.stopped(), "BeamState should not be stopped initially");
-
-        vm.expectEmit();
-        emit Stop();
-        beamState.stop();
-
-        assertTrue(beamState.stopped(), "BeamState should be stopped after calling stop");
-    }
-
-    function testStopRoleAuth() public {
-        beamState.setRoleAction(7, beamState.stop.selector, true);
-        beamState.setUserRole(USER1, 7, true);
-
-        vm.prank(USER1);
-        beamState.stop();
-
-        assertTrue(beamState.stopped(), "BeamState should be stopped by role user");
-    }
-
-    function testStopNotAuthorized() public {
-        vm.prank(USER1);
-        vm.expectRevert("BeamState/role-not-authorized");
-        beamState.stop();
-    }
-
-    function testStart() public {
-        beamState.stop();
-        assertTrue(beamState.stopped(), "BeamState should be stopped");
-
-        vm.expectEmit();
-        emit Start();
-        beamState.start();
-
-        assertFalse(beamState.stopped(), "BeamState should not be stopped after calling start");
-    }
-
-    function testStartRoleAuth() public {
-        beamState.stop();
-
-        beamState.setRoleAction(7, beamState.start.selector, true);
-        beamState.setUserRole(USER1, 7, true);
-
-        vm.prank(USER1);
-        beamState.start();
-
-        assertFalse(beamState.stopped(), "BeamState should be started by role user");
-    }
-
-    function testStartNotAuthorized() public {
-        beamState.stop();
-
-        vm.prank(USER1);
-        vm.expectRevert("BeamState/role-not-authorized");
-        beamState.start();
-    }
-
-    function testMultipleStopCalls() public {
-        beamState.stop();
-        assertTrue(beamState.stopped(), "BeamState should be stopped");
-
-        // Calling stop again should not revert
-        beamState.stop();
-        assertTrue(beamState.stopped(), "BeamState should still be stopped");
-    }
-
-    function testMultipleStartCalls() public {
-        assertFalse(beamState.stopped(), "BeamState should not be stopped initially");
-
-        // Calling start when not stopped should not revert
-        beamState.start();
-        assertFalse(beamState.stopped(), "BeamState should still not be stopped");
     }
 }
