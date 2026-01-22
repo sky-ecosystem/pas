@@ -690,6 +690,14 @@ contract BeamStateTest is DssTest {
         assertEq(limits.maxAmount, 200 * WAD, "should return TARGET1 specific maxAmount");
         assertEq(limits.slope, 0, "should return TARGET1 specific slope (unlimited)");
 
+        // Set specific values for TARGET1 (with maxAmount = 0)
+        beamState.addInitRateLimits(key, TARGET1, 0, 1 * WAD);
+
+        // Should NOT fallback because slope is non-zero (only falls back when BOTH are 0)
+        limits = beamState.getInitRateLimits(key, TARGET1);
+        assertEq(limits.maxAmount, 0, "should return TARGET1 specific maxAmount (zero)");
+        assertEq(limits.slope, 1 * WAD, "should return TARGET1 specific slope");
+
         // Test that fallback only happens when BOTH are zero
         beamState.addInitRateLimits(key, TARGET2, 0, 0);
         limits = beamState.getInitRateLimits(key, TARGET2);
@@ -906,7 +914,7 @@ contract BeamStateTest is DssTest {
         // Set unlimited as global default
         beamState.addInitRateLimits(key, address(0), type(uint256).max, 0);
 
-        // Now set unlimited for specific TARGET (this now works with the fix!)
+        // Now set unlimited for specific TARGET
         beamState.addInitRateLimits(key, TARGET1, type(uint256).max, 0);
 
         BeamState.DefaultRateLimits memory limits = beamState.getInitRateLimits(key, TARGET1);
