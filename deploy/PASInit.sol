@@ -63,6 +63,12 @@ interface TimelockWrapperLike {
 library PASInit {
     uint256 constant internal WAD = 10**18;
 
+    enum Role {
+        _UNSET,   // 0 (unused)
+        DELAYED,  // 1
+        IMMEDIATE // 2
+    }
+
     function init(
         DssInstance memory dss,
         PASInstance memory pasInstance,
@@ -85,29 +91,29 @@ library PASInit {
 
         // --- Configure BeamState ---
 
-        // Define Beam actions that are accessed through timelock (role 1) and directly (role 2)
-        beamState.setRoleAction(1, BeamStateLike.start.selector,                    true);
-        beamState.setRoleAction(1, BeamStateLike.setHop.selector,                   true);
-        beamState.setRoleAction(1, BeamStateLike.setMaxChange.selector,             true);
-        beamState.setRoleAction(1, BeamStateLike.addRateLimits.selector,            true);
-        beamState.setRoleAction(1, BeamStateLike.addController.selector,            true);
-        beamState.setRoleAction(1, BeamStateLike.addCBeam.selector,                 true);
-        beamState.setRoleAction(1, BeamStateLike.addInitRateLimits.selector,        true);
-        beamState.setRoleAction(1, BeamStateLike.addInitControllerActions.selector, true);
-        beamState.setRoleAction(2, BeamStateLike.stop.selector,                     true);
-        beamState.setRoleAction(2, BeamStateLike.delRateLimits.selector,            true);
-        beamState.setRoleAction(2, BeamStateLike.delController.selector,            true);
-        beamState.setRoleAction(2, BeamStateLike.delCBeam.selector,                 true);
-        beamState.setRoleAction(2, BeamStateLike.setCBeamForRateLimits.selector,    true);
-        beamState.setRoleAction(2, BeamStateLike.unsetCBeamForRateLimits.selector,  true);
-        beamState.setRoleAction(2, BeamStateLike.setCBeamForController.selector,    true);
-        beamState.setRoleAction(2, BeamStateLike.unsetCBeamForController.selector,  true);
-        beamState.setRoleAction(2, BeamStateLike.delInitRateLimits.selector,        true);
-        beamState.setRoleAction(2, BeamStateLike.delInitControllerActions.selector, true);
+        // Define Beam actions that are accessed through timelock (DELAYED) and directly (IMMEDIATE)
+        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.start.selector,                    true);
+        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.setHop.selector,                   true);
+        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.setMaxChange.selector,             true);
+        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addRateLimits.selector,            true);
+        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addController.selector,            true);
+        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addCBeam.selector,                 true);
+        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addInitRateLimits.selector,        true);
+        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addInitControllerActions.selector, true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.stop.selector,                     true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.delRateLimits.selector,            true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.delController.selector,            true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.delCBeam.selector,                 true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.setCBeamForRateLimits.selector,    true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.unsetCBeamForRateLimits.selector,  true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.setCBeamForController.selector,    true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.unsetCBeamForController.selector,  true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.delInitRateLimits.selector,        true);
+        beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.delInitControllerActions.selector, true);
 
-        // Set timelock as the user with role 1 and coreCouncil as the one with role 2
-        beamState.setUserRole(address(timelock), 1, true);
-        beamState.setUserRole(coreCouncil,       2, true);
+        // Set timelock as the user with DELAYED role and coreCouncil with IMMEDIATE role
+        beamState.setUserRole(address(timelock), uint8(Role.DELAYED),   true);
+        beamState.setUserRole(coreCouncil,       uint8(Role.IMMEDIATE), true);
 
         // --- Configure Timelock and Wrapper ---
 

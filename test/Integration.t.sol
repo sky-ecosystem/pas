@@ -70,7 +70,7 @@ contract IntegrationTest is DssTest {
     TimelockWrapper timelockWrapper;
 
     address pauseProxy;   // Timelock admin
-    address coreCouncil;  // Has role 2 on BeamState, proposer/canceller on Timelock
+    address coreCouncil;  // Has IMMEDIATE role on BeamState, proposer/canceller on Timelock
     address canceller;
     address pauser;
     address cBeam;        // Mock cBeam address
@@ -168,34 +168,34 @@ contract IntegrationTest is DssTest {
     }
 
     function testBeamStateRolesAfterInit() public view {
-        // Timelock has role 1
-        assertTrue(beamState.hasUserRole(address(timelock), 1), "timelock should have role 1");
-        // CoreCouncil has role 2
-        assertTrue(beamState.hasUserRole(coreCouncil, 2), "coreCouncil should have role 2");
+        // Timelock has DELAYED role
+        assertTrue(beamState.hasUserRole(address(timelock), uint8(PASInit.Role.DELAYED)), "timelock should have DELAYED role");
+        // CoreCouncil has IMMEDIATE role
+        assertTrue(beamState.hasUserRole(coreCouncil, uint8(PASInit.Role.IMMEDIATE)), "coreCouncil should have IMMEDIATE role");
     }
 
     function testBeamStateActionsConfigured() public view {
-        // Role 1 actions (timelocked)
-        assertTrue(beamState.isActionInRole(BeamState.start.selector, 1), "start should be role 1");
-        assertTrue(beamState.isActionInRole(BeamState.setHop.selector, 1), "setHop should be role 1");
-        assertTrue(beamState.isActionInRole(BeamState.setMaxChange.selector, 1), "setMaxChange should be role 1");
-        assertTrue(beamState.isActionInRole(BeamState.addRateLimits.selector, 1), "addRateLimits should be role 1");
-        assertTrue(beamState.isActionInRole(BeamState.addController.selector, 1), "addController should be role 1");
-        assertTrue(beamState.isActionInRole(BeamState.addCBeam.selector, 1), "addCBeam should be role 1");
-        assertTrue(beamState.isActionInRole(BeamState.addInitRateLimits.selector, 1), "addInitRateLimits should be role 1");
-        assertTrue(beamState.isActionInRole(BeamState.addInitControllerActions.selector, 1), "addInitControllerActions should be role 1");
+        // DELAYED role actions (timelocked)
+        assertTrue(beamState.isActionInRole(BeamState.start.selector, uint8(PASInit.Role.DELAYED)), "start should be DELAYED");
+        assertTrue(beamState.isActionInRole(BeamState.setHop.selector, uint8(PASInit.Role.DELAYED)), "setHop should be DELAYED");
+        assertTrue(beamState.isActionInRole(BeamState.setMaxChange.selector, uint8(PASInit.Role.DELAYED)), "setMaxChange should be DELAYED");
+        assertTrue(beamState.isActionInRole(BeamState.addRateLimits.selector, uint8(PASInit.Role.DELAYED)), "addRateLimits should be DELAYED");
+        assertTrue(beamState.isActionInRole(BeamState.addController.selector, uint8(PASInit.Role.DELAYED)), "addController should be DELAYED");
+        assertTrue(beamState.isActionInRole(BeamState.addCBeam.selector, uint8(PASInit.Role.DELAYED)), "addCBeam should be DELAYED");
+        assertTrue(beamState.isActionInRole(BeamState.addInitRateLimits.selector, uint8(PASInit.Role.DELAYED)), "addInitRateLimits should be DELAYED");
+        assertTrue(beamState.isActionInRole(BeamState.addInitControllerActions.selector, uint8(PASInit.Role.DELAYED)), "addInitControllerActions should be DELAYED");
 
-        // Role 2 actions (direct)
-        assertTrue(beamState.isActionInRole(BeamState.stop.selector, 2), "stop should be role 2");
-        assertTrue(beamState.isActionInRole(BeamState.delRateLimits.selector, 2), "delRateLimits should be role 2");
-        assertTrue(beamState.isActionInRole(BeamState.delController.selector, 2), "delController should be role 2");
-        assertTrue(beamState.isActionInRole(BeamState.delCBeam.selector, 2), "delCBeam should be role 2");
-        assertTrue(beamState.isActionInRole(BeamState.setCBeamForRateLimits.selector, 2), "setCBeamForRateLimits should be role 2");
-        assertTrue(beamState.isActionInRole(BeamState.unsetCBeamForRateLimits.selector, 2), "unsetCBeamForRateLimits should be role 2");
-        assertTrue(beamState.isActionInRole(BeamState.setCBeamForController.selector, 2), "setCBeamForController should be role 2");
-        assertTrue(beamState.isActionInRole(BeamState.unsetCBeamForController.selector, 2), "unsetCBeamForController should be role 2");
-        assertTrue(beamState.isActionInRole(BeamState.delInitRateLimits.selector, 2), "delInitRateLimits should be role 2");
-        assertTrue(beamState.isActionInRole(BeamState.delInitControllerActions.selector, 2), "delInitControllerActions should be role 2");
+        // IMMEDIATE role actions (direct)
+        assertTrue(beamState.isActionInRole(BeamState.stop.selector, uint8(PASInit.Role.IMMEDIATE)), "stop should be IMMEDIATE");
+        assertTrue(beamState.isActionInRole(BeamState.delRateLimits.selector, uint8(PASInit.Role.IMMEDIATE)), "delRateLimits should be IMMEDIATE");
+        assertTrue(beamState.isActionInRole(BeamState.delController.selector, uint8(PASInit.Role.IMMEDIATE)), "delController should be IMMEDIATE");
+        assertTrue(beamState.isActionInRole(BeamState.delCBeam.selector, uint8(PASInit.Role.IMMEDIATE)), "delCBeam should be IMMEDIATE");
+        assertTrue(beamState.isActionInRole(BeamState.setCBeamForRateLimits.selector, uint8(PASInit.Role.IMMEDIATE)), "setCBeamForRateLimits should be IMMEDIATE");
+        assertTrue(beamState.isActionInRole(BeamState.unsetCBeamForRateLimits.selector, uint8(PASInit.Role.IMMEDIATE)), "unsetCBeamForRateLimits should be IMMEDIATE");
+        assertTrue(beamState.isActionInRole(BeamState.setCBeamForController.selector, uint8(PASInit.Role.IMMEDIATE)), "setCBeamForController should be IMMEDIATE");
+        assertTrue(beamState.isActionInRole(BeamState.unsetCBeamForController.selector, uint8(PASInit.Role.IMMEDIATE)), "unsetCBeamForController should be IMMEDIATE");
+        assertTrue(beamState.isActionInRole(BeamState.delInitRateLimits.selector, uint8(PASInit.Role.IMMEDIATE)), "delInitRateLimits should be IMMEDIATE");
+        assertTrue(beamState.isActionInRole(BeamState.delInitControllerActions.selector, uint8(PASInit.Role.IMMEDIATE)), "delInitControllerActions should be IMMEDIATE");
     }
 
     function testTimelockWrapperBudsAfterInit() public view {
@@ -203,7 +203,7 @@ contract IntegrationTest is DssTest {
     }
 
     // ============================================================================
-    // CoreCouncil Direct Actions (Role 2) Tests
+    // CoreCouncil Direct Actions (IMMEDIATE Role) Tests
     // ============================================================================
 
     function testCoreCouncilCanStop() public {
@@ -331,7 +331,7 @@ contract IntegrationTest is DssTest {
     }
 
     // ============================================================================
-    // Timelock Flow Tests (Role 1 Actions)
+    // Timelock Flow Tests (DELAYED Role Actions)
     // ============================================================================
 
     function _scheduleAndExecute(bytes memory payload, bytes32 salt) internal {
