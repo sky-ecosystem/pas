@@ -1060,6 +1060,50 @@ contract TimelockTest is Test {
         assertEq(timelock.getNextExecutableOperation(index, 0), bytes32(0));
     }
 
+    function testGetNextExecutableOperationSkipsPendingPredecessor() public {
+        bytes memory data1 = abi.encodeWithSelector(MockTarget.setValue.selector, 1);
+        bytes memory data2 = abi.encodeWithSelector(MockTarget.setValue.selector, 2);
+        bytes memory data3 = abi.encodeWithSelector(MockTarget.setValue.selector, 3);
+
+        vm.startPrank(proposer);
+        // Schedule id1 with long delay (won't be ready)
+        bytes32 id1 = _schedule(address(mockTarget), 0, data1, bytes32(0), keccak256("s1"), 10 days);
+        // Schedule id2 with id1 as predecessor (ready but predecessor not done)
+        _schedule(address(mockTarget), 0, data2, id1, keccak256("s2"), MIN_DELAY);
+        // Schedule id3 with no predecessor (ready)
+        bytes32 id3 = _schedule(address(mockTarget), 0, data3, bytes32(0), keccak256("s3"), MIN_DELAY);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + MIN_DELAY);
+
+        // Should skip id1 (not ready), skip id2 (predecessor not done), return id3
+        assertEq(timelock.getNextExecutableOperation(0, 0), id3);
+    }
+
+    function testGetNextExecutableOperationWithDonePredecessor() public {
+        bytes memory data1 = abi.encodeWithSelector(MockTarget.setValue.selector, 1);
+        bytes memory data2 = abi.encodeWithSelector(MockTarget.setValue.selector, 2);
+
+        // Schedule operation A (no predecessor)
+        vm.prank(proposer);
+        bytes32 id1 = _schedule(address(mockTarget), 0, data1, bytes32(0), keccak256("s1"), MIN_DELAY);
+
+        // Schedule operation B with A as predecessor
+        vm.prank(proposer);
+        bytes32 id2 = _schedule(address(mockTarget), 0, data2, id1, keccak256("s2"), MIN_DELAY);
+
+        vm.warp(block.timestamp + MIN_DELAY);
+
+        // Before executing predecessor: should return id1 (id2's predecessor not done)
+        assertEq(timelock.getNextExecutableOperation(0, 0), id1);
+
+        // Execute id1 (predecessor is now done)
+        _execute(address(mockTarget), 0, data1, bytes32(0), keccak256("s1"));
+
+        // Now id2's predecessor is done, should return id2
+        assertEq(timelock.getNextExecutableOperation(0, 0), id2);
+    }
+
     function testGetOperationIndex() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
 
