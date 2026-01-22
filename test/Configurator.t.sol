@@ -382,15 +382,29 @@ contract ConfiguratorTest is DssTest {
         // Set defaults that allow unlimited for specific TARGET
         _setupDefaultRateLimits(key, address(target1), type(uint256).max, 0);
 
-        // Any value passed should result in unlimited due to special unlimited check
+        // Must pass unlimited values when defaults are unlimited
         vm.prank(CBEAM1);
         vm.expectEmit();
         emit SetRateLimit(address(target1), key, type(uint256).max, 0);
-        configurator.setRateLimit(address(target1), key, 1_000 * WAD, 10 * WAD);
+        configurator.setRateLimit(address(target1), key, type(uint256).max, 0);
 
         RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
         assertEq(data.maxAmount, type(uint256).max, "should set unlimited when defaults are unlimited");
         assertEq(data.slope, 0, "slope should be 0 for unlimited");
+    }
+
+    function testRevertSetLimitedWhenDefaultsUnlimited() public {
+        bytes32 key = keccak256("unlimited-revert-key");
+        _setupCBeam(address(target1), CBEAM1);
+        _setupRateLimitData(target1, key, 1_000 * WAD, 10 * WAD, 1_000 * WAD, block.timestamp);
+
+        // Set defaults to unlimited
+        _setupDefaultRateLimits(key, address(target1), type(uint256).max, 0);
+
+        // Should revert when passing limited values with unlimited defaults
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/unlimited-incorrect-params");
+        configurator.setRateLimit(address(target1), key, 1_000 * WAD, 10 * WAD);
     }
 
     // --- LastAmount Capping Tests ---

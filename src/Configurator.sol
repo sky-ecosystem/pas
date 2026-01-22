@@ -93,6 +93,7 @@ contract Configurator {
     function setRateLimit(address rateLimits, bytes32 key, uint256 maxAmount, uint256 slope) external notStopped authRateLimits(rateLimits) {
         (uint256 defMaxAmount, uint256 defSlope) = beamState.getInitRateLimits(key, rateLimits);
         if (defMaxAmount == type(uint256).max && defSlope == 0) {
+            require(maxAmount == type(uint256).max && slope == 0, "Configurator/unlimited-incorrect-params");
             RateLimitsLike(rateLimits).setUnlimitedRateLimitData(key);
             emit SetRateLimit(rateLimits, key, type(uint256).max, 0);
         } else {
