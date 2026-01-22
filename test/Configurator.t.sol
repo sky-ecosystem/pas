@@ -149,6 +149,7 @@ contract ConfiguratorTest is DssTest {
 
         RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
         assertEq(data.maxAmount, 400 * WAD, "maxAmount should be updated by authorized cBeam");
+        assertEq(data.slope, 4 * WAD, "slope should be updated by authorized cBeam");
     }
 
     function testAuthCBeamCannotConfigureDifferentTarget() public {
@@ -233,7 +234,7 @@ contract ConfiguratorTest is DssTest {
     function testSetRateLimitIncreasingAfterHop() public {
         bytes32 key = keccak256("after-hop-key");
         _setupCBeam(address(target1), CBEAM1);
-        _setupDefaultRateLimits(key, address(target1), 3_000 * WAD, 30 * WAD);
+        _setupDefaultRateLimits(key, address(target1), 2_000 * WAD, 20 * WAD);
         _setupRateLimitData(target1, key, 2_000 * WAD, 20 * WAD, 2_000 * WAD, block.timestamp);
         beamState.setHop(address(target1), 3_600); // 1 hour hop
         beamState.setMaxChange(address(target1), 15 * WAD / 10); // 1.5x
@@ -291,7 +292,7 @@ contract ConfiguratorTest is DssTest {
     function testSetRateLimitMaxChangeAtLimit() public {
         bytes32 key = keccak256("maxchange-exact-key");
         _setupCBeam(address(target1), CBEAM1);
-        _setupDefaultRateLimits(key, address(target1), 1_0000 * WAD, 100 * WAD);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 100 * WAD);
         _setupRateLimitData(target1, key, 1_000 * WAD, 10 * WAD, 1_000 * WAD, block.timestamp);
         beamState.setHop(address(target1), 3_600);
         beamState.setMaxChange(address(target1), 15 * WAD / 10); // 1.5x
@@ -338,9 +339,10 @@ contract ConfiguratorTest is DssTest {
     function testZzzTimestampUpdatedOnSecondIncrease() public {
         bytes32 key = keccak256("zzz-second-key");
         _setupCBeam(address(target1), CBEAM1);
-        _setupDefaultRateLimits(key, address(target1), 1_0000 * WAD, 100 * WAD);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 100 * WAD);
         _setupRateLimitData(target1, key, 1_000 * WAD, 10 * WAD, 1_000 * WAD, block.timestamp);
         beamState.setHop(address(target1), 3_600);
+        vm.warp(block.timestamp + 3_600);
 
         uint256 firstTime = block.timestamp;
         vm.prank(CBEAM1);
