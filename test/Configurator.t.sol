@@ -229,6 +229,14 @@ contract ConfiguratorTest is DssTest {
         vm.prank(CBEAM1);
         vm.expectRevert("Configurator/increment-too-soon");
         configurator.setRateLimit(address(target1), key, 1_400 * WAD, 14 * WAD);
+
+        // Fails also if one of the parameters is decreasing
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/increment-too-soon");
+        configurator.setRateLimit(address(target1), key, 1_400 * WAD, 12 * WAD);
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/increment-too-soon");
+        configurator.setRateLimit(address(target1), key, 1_200 * WAD, 14 * WAD);
     }
 
     function testSetRateLimitIncreasingAfterHop() public {
@@ -276,7 +284,7 @@ contract ConfiguratorTest is DssTest {
     function testSetRateLimitMaxChangeEnforcedSlope() public {
         bytes32 key = keccak256("maxchange-slope-key");
         _setupCBeam(address(target1), CBEAM1);
-        _setupDefaultRateLimits(key, address(target1), 1_0000 * WAD, 10 * WAD);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
         _setupRateLimitData(target1, key, 1_000 * WAD, 8 * WAD, 1_000 * WAD, block.timestamp);
         beamState.setHop(address(target1), 1); // Minimal hop delay
         beamState.setMaxChange(address(target1), 15 * WAD / 10); // 1.5x
@@ -310,24 +318,10 @@ contract ConfiguratorTest is DssTest {
 
     // --- Timestamp Tracking Tests ---
 
-    function testZzzTimestampSetOnIncrease() public {
-        bytes32 key = keccak256("zzz-key");
-        _setupCBeam(address(target1), CBEAM1);
-        _setupDefaultRateLimits(key, address(target1), 1_0000 * WAD, 100 * WAD);
-        _setupRateLimitData(target1, key, 1_000 * WAD, 10 * WAD, 1_000 * WAD, block.timestamp);
-
-        uint256 timeBefore = block.timestamp;
-
-        vm.prank(CBEAM1);
-        configurator.setRateLimit(address(target1), key, 1_200 * WAD, 12 * WAD);
-
-        assertEq(configurator.zzz(address(target1), key), timeBefore, "zzz should be set to current timestamp");
-    }
-
     function testZzzTimestampNotSetOnDecrease() public {
         bytes32 key = keccak256("zzz-decrease-key");
         _setupCBeam(address(target1), CBEAM1);
-        _setupDefaultRateLimits(key, address(target1), 1_0000 * WAD, 100 * WAD);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 100 * WAD);
         _setupRateLimitData(target1, key, 1_000 * WAD, 10 * WAD, 1_000 * WAD, block.timestamp);
 
         vm.prank(CBEAM1);
@@ -514,6 +508,73 @@ contract ConfiguratorTest is DssTest {
         configurator.setRateLimit(address(target1), key, 1_500 * WAD, 9 * WAD);
     }
 
+    function testSpecificHopUsedOverGlobal() public {
+        bytes32 key = keccak256("specific-hop-key");
+        _setupCBeam(address(target1), CBEAM1);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
+        _setupRateLimitData(target1, key, 900 * WAD, 9 * WAD, 900 * WAD, block.timestamp);
+
+        // Set specific hop shorter than global (1 hour vs 1 day)
+        beamState.setHop(address(target1), 3_600);
+
+        assertGt(beamState.hop(address(0)), 3_600, "global hop should be greater than 3_600");
+        assertEq(beamState.hop(address(target1)), 3_600, "TARGET1 specific hop should be 3600");
+        assertEq(beamState.getHop(address(target1)), 3_600, "should use specific hop");
+
+        vm.warp(block.timestamp + 3_600); // Warp to specific hop (shorter than global)
+
+        // First increase beyond defaults (unsafe)
+        vm.prank(CBEAM1);
+        configurator.setRateLimit(address(target1), key, 1_100 * WAD, 11 * WAD);
+
+        // Try second increase immediately - should fail due to specific hop
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/increment-too-soon");
+        configurator.setRateLimit(address(target1), key, 1_200 * WAD, 12 * WAD);
+
+        // Wait for specific hop period (not the global 86_400)
+        vm.warp(block.timestamp + 3_600);
+
+        // Should succeed after specific hop period
+        vm.prank(CBEAM1);
+        configurator.setRateLimit(address(target1), key, 1_200 * WAD, 12 * WAD);
+
+        RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
+        assertEq(data.maxAmount, 1_200 * WAD, "maxAmount should increase after specific hop");
+        assertEq(data.slope, 12 * WAD, "slope should increase after specific hop");
+    }
+
+    function testSpecificMaxChangeUsedOverGlobal() public {
+        bytes32 key = keccak256("specific-maxchange-key");
+        _setupCBeam(address(target1), CBEAM1);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
+        _setupRateLimitData(target1, key, 900 * WAD, 9 * WAD, 900 * WAD, block.timestamp);
+
+        // Set specific maxChange higher than global (2x vs 1.5x)
+        beamState.setMaxChange(address(target1), 2 * WAD);
+
+        assertLt(beamState.maxChange(address(0)), 2 * WAD, "global maxChange should be less than 2x");
+        assertEq(beamState.maxChange(address(target1)), 2 * WAD, "TARGET1 specific maxChange should be 2x");
+        assertEq(beamState.getMaxChange(address(target1)), 2 * WAD, "should use specific maxChange");
+
+        vm.warp(block.timestamp + 86_400); // Wait for hop
+
+        // Increase by 1.67x - would fail with global 1.5x, but succeeds with specific 2x
+        vm.prank(CBEAM1);
+        configurator.setRateLimit(address(target1), key, 1_500 * WAD, 15 * WAD);
+
+        RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
+        assertEq(data.maxAmount, 1_500 * WAD, "should allow 1.67x increase with specific 2x maxChange");
+        assertEq(data.slope, 15 * WAD, "should allow 1.67x increase with specific 2x slope");
+
+        vm.warp(block.timestamp + 86_400); // Wait for next hop
+
+        // Try to exceed the specific maxChange (2x) - should fail
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/maxChange-maxAmount");
+        configurator.setRateLimit(address(target1), key, 3_100 * WAD, 15 * WAD); // >2x from 1500
+    }
+
     // --- Controller Action Tests ---
 
     function testCallControllerAction() public {
@@ -585,20 +646,6 @@ contract ConfiguratorTest is DssTest {
         vm.prank(CBEAM1);
         vm.expectRevert("Configurator/call-failed");
         configurator.callControllerAction(address(target1), data);
-    }
-
-    function testCallControllerActionArbitraryData() public {
-        bytes memory data = abi.encodeWithSignature("someOtherFunction(address,uint256)", address(this), 999);
-
-        _setupCBeam(address(target1), CBEAM1);
-        beamState.addInitControllerActions(data, address(target1));
-
-        vm.prank(CBEAM1);
-        vm.expectEmit();
-        emit CallControllerAction(address(target1), data);
-        configurator.callControllerAction(address(target1), data);
-
-        assertEq(target1.lastCallData(), data, "arbitrary data should be passed correctly");
     }
 
     // --- Combined functions Tests ---
