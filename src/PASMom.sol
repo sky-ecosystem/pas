@@ -44,8 +44,8 @@ contract PASMom {
 
     event SetOwner(address indexed newOwner);
     event SetAuthority(address indexed newAuthority);
-    event Stop();
-    event Pause();
+    event StopBeamState();
+    event PauseTimelock();
 
     // --- Modifiers ---
 
@@ -96,11 +96,11 @@ contract PASMom {
 
     function stop() external auth {
         beamState.stop();
-        emit Stop();
+        emit StopBeamState();
     }
 
     function pause() external auth {
         timelock.pause();
-        emit Pause();
+        emit PauseTimelock();
     }
 }

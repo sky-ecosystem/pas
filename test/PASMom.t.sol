@@ -43,8 +43,8 @@ contract PASMomTest is DssTest {
 
     event SetOwner(address indexed newOwner);
     event SetAuthority(address indexed newAuthority);
-    event Stop();
-    event Pause();
+    event StopBeamState();
+    event PauseTimelock();
 
     function setUp() public {
         vm.createSelectFork(vm.envString("ETH_RPC_URL"));
@@ -122,7 +122,7 @@ contract PASMomTest is DssTest {
         assertEq(beamState.stopped(), false);
         vm.prank(who);
         vm.expectEmit(true, true, true, true);
-        emit Stop();
+        emit StopBeamState();
         mom.stop();
         assertEq(beamState.stopped(), true);
     }
@@ -139,7 +139,7 @@ contract PASMomTest is DssTest {
         assertEq(timelock.paused(), false);
         vm.prank(who);
         vm.expectEmit(true, true, true, true);
-        emit Pause();
+        emit PauseTimelock();
         mom.pause();
         assertEq(timelock.paused(), true);
     }
