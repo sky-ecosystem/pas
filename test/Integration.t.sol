@@ -25,6 +25,11 @@ import { BeamState } from "src/BeamState.sol";
 import { Configurator, RateLimitsLike } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { TimelockWrapper, RateLimitConfig } from "src/timelock/TimelockWrapper.sol";
+import { PASMom } from "src/PASMom.sol";
+
+interface ChiefLike {
+    function hat() external view returns (address);
+}
 
 // Interface for SparkController
 interface ControllerLike {
@@ -68,6 +73,8 @@ contract IntegrationTest is DssTest {
     Configurator    configurator;
     Timelock        timelock;
     TimelockWrapper timelockWrapper;
+    PASMom          mom;
+    ChiefLike       chief;
 
     address pauseProxy;   // Timelock admin
     address coreCouncil;  // Has IMMEDIATE role on BeamState, proposer/canceller on Timelock
@@ -119,6 +126,8 @@ contract IntegrationTest is DssTest {
         configurator    = Configurator(pas.configurator);
         timelock        = Timelock(payable(pas.timelock));
         timelockWrapper = TimelockWrapper(pas.timelockWrapper);
+        mom             = PASMom(pas.mom);
+        chief           = ChiefLike(dss.chainlog.getAddress("MCD_ADM"));
 
         // Initialize using PASInit (must be called by pauseProxy who has auth on BeamState and Timelock)
         address[] memory cancellers = new address[](1);
@@ -141,6 +150,12 @@ contract IntegrationTest is DssTest {
         assertTrue(pas.configurator != address(0), "configurator should be deployed");
         assertTrue(pas.timelock != address(0), "timelock should be deployed");
         assertTrue(pas.timelockWrapper != address(0), "timelockWrapper should be deployed");
+        assertTrue(pas.mom != address(0), "mom should be deployed");
+    }
+
+    function testMomLinkedCorrectly() public view {
+        assertEq(address(mom.beamState()), address(beamState), "mom should reference beamState");
+        assertEq(address(mom.timelock()), address(timelock), "mom should reference timelock");
     }
 
     function testConfiguratorLinkedToBeamState() public view {
@@ -156,6 +171,14 @@ contract IntegrationTest is DssTest {
         assertEq(dss.chainlog.getAddress("PAS_STATE"), address(beamState), "PAS_STATE should be set in chainlog");
         assertEq(dss.chainlog.getAddress("PAS_CONFIGURATOR"), address(configurator), "PAS_CONFIGURATOR should be set in chainlog");
         assertEq(dss.chainlog.getAddress("PAS_TIMELOCK"), address(timelock), "PAS_TIMELOCK should be set in chainlog");
+        assertEq(dss.chainlog.getAddress("PAS_MOM"), address(mom), "PAS_MOM should be set in chainlog");
+    }
+
+    function testMomConfigAfterInit() public view {
+        assertEq(mom.owner(), pauseProxy, "mom owner should be pauseProxy");
+        assertEq(mom.authority(), address(chief), "mom authority should be MCD_ADM");
+        assertEq(beamState.wards(address(mom)), 1, "mom should have wards on beamState");
+        assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), address(mom)), "mom should have PAUSER_ROLE on timelock");
     }
 
     function testTimelockRolesAfterInit() public view {
@@ -658,6 +681,126 @@ contract IntegrationTest is DssTest {
         vm.prank(coreCouncil);
         vm.expectRevert();
         timelock.updateDelayImmediately(2 days);
+    }
+
+    // ============================================================================
+    // PASMom Integration Tests
+    // ============================================================================
+
+    function testMomOwnerCanStopBeamState() public {
+        assertFalse(beamState.stopped(), "should not be stopped initially");
+
+        vm.prank(pauseProxy);
+        mom.stop();
+
+        assertTrue(beamState.stopped(), "beamState should be stopped via mom");
+    }
+
+    function testMomOwnerCanPauseTimelock() public {
+        assertFalse(timelock.paused(), "timelock should not be paused initially");
+
+        vm.prank(pauseProxy);
+        mom.pause();
+
+        assertTrue(timelock.paused(), "timelock should be paused via mom");
+    }
+
+    function testMomHatCanStopBeamState() public {
+        address hat = chief.hat();
+        assertFalse(beamState.stopped(), "should not be stopped initially");
+
+        vm.prank(hat);
+        mom.stop();
+
+        assertTrue(beamState.stopped(), "beamState should be stopped via mom by hat");
+    }
+
+    function testMomHatCanPauseTimelock() public {
+        address hat = chief.hat();
+        assertFalse(timelock.paused(), "timelock should not be paused initially");
+
+        vm.prank(hat);
+        mom.pause();
+
+        assertTrue(timelock.paused(), "timelock should be paused via mom by hat");
+    }
+
+    function testMomUnauthorizedCannotStop() public {
+        address unauthorized = address(0x999);
+
+        vm.prank(unauthorized);
+        vm.expectRevert("PASMom/not-authorized");
+        mom.stop();
+    }
+
+    function testMomUnauthorizedCannotPause() public {
+        address unauthorized = address(0x999);
+
+        vm.prank(unauthorized);
+        vm.expectRevert("PASMom/not-authorized");
+        mom.pause();
+    }
+
+    function testMomEmergencyStopBlocksOperations() public {
+        // Setup: onboard a cBeam and associate it with rateLimits
+        bytes32 rateLimitKey = keccak256("mom-test-key");
+
+        vm.startPrank(pauseProxy);
+        beamState.addCBeam(cBeam);
+        beamState.addRateLimits(SPARK_RATE_LIMITS);
+        beamState.addInitRateLimits(rateLimitKey, SPARK_RATE_LIMITS, 1_000_000e18, 100_000e18);
+        vm.stopPrank();
+
+        vm.prank(coreCouncil);
+        beamState.setCBeamForRateLimits(SPARK_RATE_LIMITS, cBeam);
+
+        // Grant configurator admin role
+        vm.prank(SPARK_PROXY);
+        RateLimitsWithRolesLike(SPARK_RATE_LIMITS).grantRole(OZ_DEFAULT_ADMIN_ROLE, address(configurator));
+
+        // cBeam can operate normally
+        vm.prank(cBeam);
+        configurator.setRateLimit(SPARK_RATE_LIMITS, rateLimitKey, 500_000e18, 50_000e18);
+
+        // Hat triggers emergency stop via mom
+        address hat = chief.hat();
+        vm.prank(hat);
+        mom.stop();
+
+        // cBeam operations are now blocked
+        vm.prank(cBeam);
+        vm.expectRevert("Configurator/stopped");
+        configurator.setRateLimit(SPARK_RATE_LIMITS, rateLimitKey, 400_000e18, 40_000e18);
+    }
+
+    function testMomPauseBlocksTimelockScheduling() public {
+        // Hat pauses timelock via mom
+        address hat = chief.hat();
+        vm.prank(hat);
+        mom.pause();
+
+        // Scheduling via wrapper is blocked
+        vm.prank(coreCouncil);
+        vm.expectRevert();
+        timelockWrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+    }
+
+    function testMomPauseBlocksTimelockExecution() public {
+        // Schedule an operation first
+        vm.prank(coreCouncil);
+        bytes32 operationId = timelockWrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+
+        vm.warp(block.timestamp + MIN_DELAY);
+
+        // Hat pauses timelock via mom
+        address hat = chief.hat();
+        vm.prank(hat);
+        mom.pause();
+
+        // Execution is blocked
+        Timelock.Operation memory op = timelock.getOperation(operationId);
+        vm.expectRevert();
+        timelock.executeBatch(op.targets, op.values, op.payloads, op.predecessor, op.salt);
     }
 
     // ============================================================================
