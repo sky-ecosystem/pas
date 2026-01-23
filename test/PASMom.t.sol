@@ -72,7 +72,7 @@ contract PASMomTest is DssTest {
     }
 
     function testInit() public view {
-        assertTrue(beamState.hasUserRole(address(mom), uint8(PASInit.Role.IMMEDIATE)));
+        assertEq(beamState.wards(address(mom)), 1);
         assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), address(mom)));
         assertEq(mom.authority(), dss.chainlog.getAddress("MCD_ADM"));
         assertEq(dss.chainlog.getAddress("PAS_MOM"), address(mom));

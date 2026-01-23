@@ -20,6 +20,7 @@ import { DssInstance } from "dss-test/MCD.sol";
 import { PASInstance } from "./PASInstance.sol";
 
 interface BeamStateLike {
+    function rely(address) external;
     function setUserRole(address, uint8, bool) external;
     function setRoleAction(uint8, bytes4, bool) external;
     function stop() external;
@@ -141,8 +142,8 @@ library PASInit {
 
         // --- Configure Mom ---
 
-        // Give Mom the IMMEDIATE role to call stop() on BeamState
-        beamState.setUserRole(address(mom), uint8(Role.IMMEDIATE), true);
+        // Rely Mom on BeamState to call stop()
+        beamState.rely(address(mom));
         // Give Mom the PAUSER_ROLE to call pause() on Timelock
         timelock.grantRole(timelock.PAUSER_ROLE(), address(mom));
         // Set Mom's authority to MCD_ADM
