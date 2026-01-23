@@ -79,7 +79,7 @@ struct RateLimitConfig {
 // Notes:
 // - This wrapper is assumed as a helper only, and can be bypassed by submitting payloads directly to the Timelock (for an authorised proposer).
 // - The wrapper is assumed to be frequently replaced/improved, depending on downstream contracts changes or other needs.
-// - The actual downstream changes only take effect when cBEAMs use the BEAMState configurations, so atomicity in configurations can not be assumed.
+// - The actual downstream changes only take effect when cBEAMs use the BEAMState configurations, so atomicity in configurations can not be assumed (which is a known issue).
 // - As part of a controller onboarding it might need to be `kiss`ed on the PSM. That is assumed to be orchestrated without the wrapper.
 contract TimelockWrapper {
     // --- Auth ---
