@@ -19,3 +19,7 @@ Extended OpenZeppelin TimelockController with pausing support, permissionless ex
 ### TimelockWrapper
 
 Convenience contract for proposers to schedule batched BeamState configuration changes through the timelock. Provides type-safe wrappers for common operations like adding rate limits, controllers, cBeams, and their initial configurations. Authorized users (`buds`) can schedule proposals that execute after the timelock delay.
+
+### PASMom
+
+Emergency governance contract that allows authorized parties to trigger circuit breakers. Can call `stop()` on BeamState to halt Configurator operations and `pause()` on Timelock to block scheduling and execution. Callable by the owner or via the Chief's hat through the authority.
