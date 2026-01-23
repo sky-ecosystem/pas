@@ -60,6 +60,12 @@ interface TimelockWrapperLike {
     function kiss(address) external;
 }
 
+interface PASMomLike {
+    function beamState() external view returns (address);
+    function timelock() external view returns (address);
+    function setAuthority(address) external;
+}
+
 library PASInit {
     uint256 constant internal WAD = 10**18;
 
@@ -81,6 +87,7 @@ library PASInit {
         ConfiguratorLike    configurator    = ConfiguratorLike(pasInstance.configurator);
         TimelockLike        timelock        = TimelockLike(pasInstance.timelock);
         TimelockWrapperLike timelockWrapper = TimelockWrapperLike(pasInstance.timelockWrapper);
+        PASMomLike          mom             = PASMomLike(pasInstance.mom);
 
         // --- Sanity checks ---
 
@@ -88,6 +95,8 @@ library PASInit {
         require(timelock.getMinDelay()      == minDelay,              "PASInit/timelock-minDelay-mismatch");
         require(timelockWrapper.timelock()  == address(timelock),     "PASInit/wrapper-timelock-mismatch");
         require(timelockWrapper.beamState() == address(beamState),    "PASInit/wrapper-beamState-mismatch");
+        require(address(mom.beamState())    == address(beamState),    "PASInit/mom-beamState-mismatch");
+        require(address(mom.timelock())     == address(timelock),     "PASInit/mom-timelock-mismatch");
 
         // --- Configure BeamState ---
 
@@ -130,10 +139,20 @@ library PASInit {
         }
         timelockWrapper.kiss(coreCouncil);
 
+        // --- Configure Mom ---
+
+        // Give Mom the IMMEDIATE role to call stop() on BeamState
+        beamState.setUserRole(address(mom), uint8(Role.IMMEDIATE), true);
+        // Give Mom the PAUSER_ROLE to call pause() on Timelock
+        timelock.grantRole(timelock.PAUSER_ROLE(), address(mom));
+        // Set Mom's authority to MCD_ADM
+        mom.setAuthority(dss.chainlog.getAddress("MCD_ADM"));
+
         // --- Chainlog ---
 
         dss.chainlog.setAddress("PAS_STATE",        address(beamState));
         dss.chainlog.setAddress("PAS_CONFIGURATOR", address(configurator));
         dss.chainlog.setAddress("PAS_TIMELOCK",     address(timelock));
+        dss.chainlog.setAddress("PAS_MOM",          address(mom));
     }
 }

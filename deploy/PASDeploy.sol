@@ -22,6 +22,7 @@ import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { TimelockWrapper } from "src/timelock/TimelockWrapper.sol";
+import { PASMom } from "src/PASMom.sol";
 
 library PASDeploy {
 
@@ -44,7 +45,13 @@ library PASDeploy {
             pasInstance.beamState
         ));
 
+        pasInstance.mom = address(new PASMom(
+            pasInstance.beamState,
+            pasInstance.timelock
+        ));
+
         ScriptTools.switchOwner(pasInstance.beamState, deployer, owner);
         ScriptTools.switchOwner(pasInstance.timelockWrapper, deployer, owner);
+        PASMom(pasInstance.mom).setOwner(owner);
     }
 }
