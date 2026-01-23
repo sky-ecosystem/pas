@@ -96,8 +96,8 @@ library PASInit {
         require(timelock.getMinDelay()      == minDelay,              "PASInit/timelock-minDelay-mismatch");
         require(timelockWrapper.timelock()  == address(timelock),     "PASInit/wrapper-timelock-mismatch");
         require(timelockWrapper.beamState() == address(beamState),    "PASInit/wrapper-beamState-mismatch");
-        require(address(mom.beamState())    == address(beamState),    "PASInit/mom-beamState-mismatch");
-        require(address(mom.timelock())     == address(timelock),     "PASInit/mom-timelock-mismatch");
+        require(mom.beamState()             == address(beamState),    "PASInit/mom-beamState-mismatch");
+        require(mom.timelock()              == address(timelock),     "PASInit/mom-timelock-mismatch");
 
         // --- Configure BeamState ---
 
