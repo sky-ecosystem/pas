@@ -156,6 +156,7 @@ contract IntegrationTest is DssTest {
     function testMomLinkedCorrectly() public view {
         assertEq(address(mom.beamState()), address(beamState), "mom should reference beamState");
         assertEq(address(mom.timelock()), address(timelock), "mom should reference timelock");
+        assertEq(mom.owner(), pauseProxy, "mom should be owned by pauseProxy");
     }
 
     function testConfiguratorLinkedToBeamState() public view {

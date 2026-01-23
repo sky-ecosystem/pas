@@ -18,26 +18,29 @@ pragma solidity ^0.8.24;
 
 import "dss-test/DssTest.sol";
 
-import { PASInstance } from "deploy/PASInstance.sol";
-import { PASDeploy } from "deploy/PASDeploy.sol";
-import { PASInit } from "deploy/PASInit.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { PASMom } from "src/PASMom.sol";
 
-interface ChiefLike {
-    function hat() external view returns (address);
+contract MockChief {
+    address hat;
+
+    constructor(address hat_) {
+        hat = hat_;
+    }
+
+    function canCall(address caller, address, bytes4) external view returns (bool ok) {
+        ok = caller == hat;
+    }
 }
 
 contract PASMomTest is DssTest {
-    address constant CHAINLOG = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
-
-    DssInstance dss;
-    ChiefLike   chief;
+    address     owner;
+    address     hat;
+    MockChief   chief;
     BeamState   beamState;
     Timelock    timelock;
     PASMom      mom;
-    address     pauseProxy;
 
     uint256 constant MIN_DELAY = 1 days;
 
@@ -47,39 +50,23 @@ contract PASMomTest is DssTest {
     event PauseTimelock();
 
     function setUp() public {
-        vm.createSelectFork(vm.envString("ETH_RPC_URL"));
-        dss = MCD.loadFromChainlog(CHAINLOG);
-        chief = ChiefLike(dss.chainlog.getAddress("MCD_ADM"));
-        pauseProxy = dss.chainlog.getAddress("MCD_PAUSE_PROXY");
+        owner = makeAddr("owner");
+        hat = makeAddr("hat");
+        chief = new MockChief(hat);
 
-        PASInstance memory inst = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
-        beamState = BeamState(inst.beamState);
-        timelock  = Timelock(payable(inst.timelock));
-        mom       = PASMom(inst.mom);
+        vm.startPrank(owner);
+        beamState = new BeamState();
+        timelock  = new Timelock(MIN_DELAY, owner);
+        mom       = new PASMom(address(beamState), address(timelock));
 
-        address[] memory cancellers = new address[](0);
-        address[] memory pausers    = new address[](0);
-
-        vm.startPrank(pauseProxy);
-        PASInit.init(dss, inst, MIN_DELAY, pauseProxy, cancellers, pausers);
+        beamState.rely(address(mom));
+        timelock.grantRole(timelock.PAUSER_ROLE(), address(mom));
+        mom.setAuthority(address(chief));
         vm.stopPrank();
     }
 
-    function testDeploy() public view {
-        assertEq(address(mom.beamState()), address(beamState));
-        assertEq(address(mom.timelock()),  address(timelock));
-        assertEq(mom.owner(), pauseProxy);
-    }
-
-    function testInit() public view {
-        assertEq(beamState.wards(address(mom)), 1);
-        assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), address(mom)));
-        assertEq(mom.authority(), dss.chainlog.getAddress("MCD_ADM"));
-        assertEq(dss.chainlog.getAddress("PAS_MOM"), address(mom));
-    }
-
     function testConstructor() public {
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit();
         emit SetOwner(address(this));
         PASMom mom2 = new PASMom(address(beamState), address(timelock));
 
@@ -97,22 +84,22 @@ contract PASMomTest is DssTest {
     function testAuthMethods() public {
         checkModifier(address(mom), "PASMom/not-authorized", [PASMom.stop.selector, PASMom.pause.selector]);
 
-        vm.prank(pauseProxy);
+        vm.prank(owner);
         mom.setAuthority(address(0));
         checkModifier(address(mom), "PASMom/not-authorized", [PASMom.stop.selector, PASMom.pause.selector]);
     }
 
     function testSetOwner() public {
-        vm.prank(pauseProxy);
-        vm.expectEmit(true, true, true, true);
+        vm.prank(owner);
+        vm.expectEmit();
         emit SetOwner(address(0x1234));
         mom.setOwner(address(0x1234));
         assertEq(mom.owner(), address(0x1234));
     }
 
     function testSetAuthority() public {
-        vm.prank(pauseProxy);
-        vm.expectEmit(true, true, true, true);
+        vm.prank(owner);
+        vm.expectEmit();
         emit SetAuthority(address(0x123));
         mom.setAuthority(address(0x123));
         assertEq(mom.authority(), address(0x123));
@@ -121,34 +108,34 @@ contract PASMomTest is DssTest {
     function _checkStop(address who) internal {
         assertEq(beamState.stopped(), false);
         vm.prank(who);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit();
         emit StopBeamState();
         mom.stop();
         assertEq(beamState.stopped(), true);
     }
 
     function testStopOwner() public {
-        _checkStop(pauseProxy);
+        _checkStop(owner);
     }
 
     function testStopHat() public {
-        _checkStop(chief.hat());
+        _checkStop(hat);
     }
 
     function _checkPause(address who) internal {
         assertEq(timelock.paused(), false);
         vm.prank(who);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit();
         emit PauseTimelock();
         mom.pause();
         assertEq(timelock.paused(), true);
     }
 
     function testPauseOwner() public {
-        _checkPause(pauseProxy);
+        _checkPause(owner);
     }
 
     function testPauseHat() public {
-        _checkPause(chief.hat());
+        _checkPause(hat);
     }
 }
