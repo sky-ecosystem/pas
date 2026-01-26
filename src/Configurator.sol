@@ -84,6 +84,10 @@ contract Configurator {
 
     // --- Internal functions ---
 
+    function _max(uint256 x, uint256 y) internal pure returns (uint256 z) {
+        z = x > y ? x : y;
+    }
+
     function _min(uint256 x, uint256 y) internal pure returns (uint256 z) {
         z = x < y ? x : y;
     }
@@ -98,13 +102,15 @@ contract Configurator {
             emit SetRateLimit(rateLimits, key, type(uint256).max, 0);
         } else {
             RateLimitsLike.RateLimitData memory current = RateLimitsLike(rateLimits).getRateLimitData(key);
-            bool withinCurrent = maxAmount <= current.maxAmount && slope <= current.slope;
-            bool safe = maxAmount <= defMaxAmount && slope <= defSlope || withinCurrent;
             uint256 maxChange = beamState.getMaxChange(rateLimits);
-            require(safe || block.timestamp >= zzz[rateLimits][key] + beamState.getHop(rateLimits), "Configurator/increment-too-soon");
-            require(safe || maxAmount <= current.maxAmount * maxChange / WAD, "Configurator/maxChange-maxAmount"); // maxChange always >= WAD
-            require(safe || slope <= current.slope * maxChange / WAD, "Configurator/maxChange-slope");
-            if (!withinCurrent) {
+
+            // Ceiling is the max of (current * maxChange) and default
+            require(maxAmount <= _max(current.maxAmount * maxChange / WAD, defMaxAmount), "Configurator/exceeds-max-amount");
+            require(slope <= _max(current.slope * maxChange / WAD, defSlope), "Configurator/exceeds-max-slope");
+
+            // Any increase requires hop
+            if (maxAmount > current.maxAmount || slope > current.slope) {
+                require(block.timestamp >= zzz[rateLimits][key] + beamState.getHop(rateLimits), "Configurator/increment-too-soon");
                 zzz[rateLimits][key] = block.timestamp;
             }
             uint256 lastAmount = RateLimitsLike(rateLimits).getCurrentRateLimit(key);
