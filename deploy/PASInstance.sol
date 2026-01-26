@@ -21,4 +21,5 @@ struct PASInstance {
     address configurator;
     address timelock;
     address timelockWrapper;
+    address mom;
 }
