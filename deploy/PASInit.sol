@@ -84,20 +84,14 @@ library PASInit {
         address[]   memory cancellers,
         address[]   memory pausers
     ) internal {
-        BeamStateLike       beamState       = BeamStateLike(pasInstance.beamState);
-        ConfiguratorLike    configurator    = ConfiguratorLike(pasInstance.configurator);
-        TimelockLike        timelock        = TimelockLike(pasInstance.timelock);
-        TimelockWrapperLike timelockWrapper = TimelockWrapperLike(pasInstance.timelockWrapper);
-        PASMomLike          mom             = PASMomLike(pasInstance.mom);
+        BeamStateLike    beamState    = BeamStateLike(pasInstance.beamState);
+        ConfiguratorLike configurator = ConfiguratorLike(pasInstance.configurator);
+        TimelockLike     timelock     = TimelockLike(pasInstance.timelock);
 
         // --- Sanity checks ---
 
-        require(configurator.beamState()    == address(beamState),    "PASInit/configurator-beamState-mismatch");
-        require(timelock.getMinDelay()      == minDelay,              "PASInit/timelock-minDelay-mismatch");
-        require(timelockWrapper.timelock()  == address(timelock),     "PASInit/wrapper-timelock-mismatch");
-        require(timelockWrapper.beamState() == address(beamState),    "PASInit/wrapper-beamState-mismatch");
-        require(mom.beamState()             == address(beamState),    "PASInit/mom-beamState-mismatch");
-        require(mom.timelock()              == address(timelock),     "PASInit/mom-timelock-mismatch");
+        require(configurator.beamState() == address(beamState), "PASInit/configurator-beamState-mismatch");
+        require(timelock.getMinDelay()   == minDelay,           "PASInit/timelock-minDelay-mismatch");
 
         // --- Configure BeamState ---
 
@@ -127,10 +121,9 @@ library PASInit {
 
         // --- Configure Timelock and Wrapper ---
 
-        // Grant the coreCouncil as the proposer in the timelock either directly or through the wrapper
+        // Grant the coreCouncil as the proposer in the timelock directly
         // Grant cancellers and pausers in timelock with their respective roles
         timelock.grantRole(timelock.PROPOSER_ROLE(),  coreCouncil);
-        timelock.grantRole(timelock.PROPOSER_ROLE(),  address(timelockWrapper));
         timelock.grantRole(timelock.CANCELLER_ROLE(), coreCouncil);
         for (uint256 i = 0; i < cancellers.length; ++i) {
             timelock.grantRole(timelock.CANCELLER_ROLE(), cancellers[i]);
@@ -138,9 +131,30 @@ library PASInit {
         for (uint256 i = 0; i < pausers.length; ++i) {
             timelock.grantRole(timelock.PAUSER_ROLE(), pausers[i]);
         }
-        timelockWrapper.kiss(coreCouncil);
 
-        // --- Configure Mom ---
+        // --- Chainlog ---
+
+        dss.chainlog.setAddress("PAS_STATE",        address(beamState));
+        dss.chainlog.setAddress("PAS_CONFIGURATOR", address(configurator));
+        dss.chainlog.setAddress("PAS_TIMELOCK",     address(timelock));
+    }
+
+    function initMom(
+        DssInstance memory dss,
+        address beamState_,
+        address timelock_,
+        address mom_
+    ) internal {
+        BeamStateLike beamState = BeamStateLike(beamState_);
+        TimelockLike  timelock  = TimelockLike(timelock_);
+        PASMomLike    mom       = PASMomLike(mom_);
+
+        // --- Sanity checks ---
+
+        require(mom.beamState() == address(beamState), "PASInit/mom-beamState-mismatch");
+        require(mom.timelock()  == address(timelock),  "PASInit/mom-timelock-mismatch");
+
+        // --- Set permissions ---
 
         // Rely Mom on BeamState to call stop()
         beamState.rely(address(mom));
@@ -151,9 +165,27 @@ library PASInit {
 
         // --- Chainlog ---
 
-        dss.chainlog.setAddress("PAS_STATE",        address(beamState));
-        dss.chainlog.setAddress("PAS_CONFIGURATOR", address(configurator));
-        dss.chainlog.setAddress("PAS_TIMELOCK",     address(timelock));
-        dss.chainlog.setAddress("PAS_MOM",          address(mom));
+        dss.chainlog.setAddress("PAS_MOM", address(mom));
+    }
+
+    function initTimelockWrapper(
+        address timelock_,
+        address beamState_,
+        address timelockWrapper_,
+        address coreCouncil
+    ) internal {
+        TimelockLike        timelock        = TimelockLike(timelock_);
+        TimelockWrapperLike timelockWrapper = TimelockWrapperLike(timelockWrapper_);
+
+        // --- Sanity checks ---
+
+        require(timelockWrapper.timelock()  == address(timelock),  "PASInit/wrapper-timelock-mismatch");
+        require(timelockWrapper.beamState() == beamState_, "PASInit/wrapper-beamState-mismatch");
+
+        // --- Set permissions ---
+
+        // Grant the coreCouncil as the proposer through the wrapper
+        timelock.grantRole(timelock.PROPOSER_ROLE(), address(timelockWrapper));
+        timelockWrapper.kiss(coreCouncil);
     }
 }

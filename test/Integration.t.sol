@@ -120,14 +120,15 @@ contract IntegrationTest is DssTest {
 
         // Deploy using PASDeploy
         pas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
-
         // Cast to typed contracts
-        beamState       = BeamState(pas.beamState);
-        configurator    = Configurator(pas.configurator);
-        timelock        = Timelock(payable(pas.timelock));
-        timelockWrapper = TimelockWrapper(pas.timelockWrapper);
-        mom             = PASMom(pas.mom);
-        chief           = ChiefLike(dss.chainlog.getAddress("MCD_ADM"));
+        beamState    = BeamState(pas.beamState);
+        configurator = Configurator(pas.configurator);
+        timelock     = Timelock(payable(pas.timelock));
+        // Deploy Mom and TimelockWrapper separately
+        mom             = PASMom(PASDeploy.deployMom(pauseProxy, pas.beamState, pas.timelock));
+        timelockWrapper = TimelockWrapper(PASDeploy.deployTimelockWrapper(address(this), pauseProxy, pas.timelock, pas.beamState));
+
+        chief = ChiefLike(dss.chainlog.getAddress("MCD_ADM"));
 
         // Initialize using PASInit (must be called by pauseProxy who has auth on BeamState and Timelock)
         address[] memory cancellers = new address[](1);
@@ -138,6 +139,8 @@ contract IntegrationTest is DssTest {
 
         vm.startPrank(pauseProxy);
         PASInit.init(dss, pas, MIN_DELAY, coreCouncil, cancellers, pausers);
+        PASInit.initMom(dss, pas.beamState, pas.timelock, address(mom));
+        PASInit.initTimelockWrapper(pas.timelock, pas.beamState, address(timelockWrapper), coreCouncil);
         vm.stopPrank();
     }
 
@@ -149,18 +152,18 @@ contract IntegrationTest is DssTest {
         assertTrue(pas.beamState != address(0), "beamState should be deployed");
         assertTrue(pas.configurator != address(0), "configurator should be deployed");
         assertTrue(pas.timelock != address(0), "timelock should be deployed");
-        assertTrue(pas.timelockWrapper != address(0), "timelockWrapper should be deployed");
-        assertTrue(pas.mom != address(0), "mom should be deployed");
+        assertTrue(address(mom) != address(0), "mom should be deployed");
+        assertTrue(address(timelockWrapper) != address(0), "timelockWrapper should be deployed");
+    }
+
+    function testConfiguratorLinkedToBeamState() public view {
+        assertEq(address(configurator.beamState()), address(beamState), "configurator should reference beamState");
     }
 
     function testMomLinkedCorrectly() public view {
         assertEq(address(mom.beamState()), address(beamState), "mom should reference beamState");
         assertEq(address(mom.timelock()), address(timelock), "mom should reference timelock");
         assertEq(mom.owner(), pauseProxy, "mom should be owned by pauseProxy");
-    }
-
-    function testConfiguratorLinkedToBeamState() public view {
-        assertEq(address(configurator.beamState()), address(beamState), "configurator should reference beamState");
     }
 
     function testTimelockWrapperLinkedCorrectly() public view {
@@ -173,29 +176,6 @@ contract IntegrationTest is DssTest {
         assertEq(dss.chainlog.getAddress("PAS_CONFIGURATOR"), address(configurator), "PAS_CONFIGURATOR should be set in chainlog");
         assertEq(dss.chainlog.getAddress("PAS_TIMELOCK"), address(timelock), "PAS_TIMELOCK should be set in chainlog");
         assertEq(dss.chainlog.getAddress("PAS_MOM"), address(mom), "PAS_MOM should be set in chainlog");
-    }
-
-    function testMomConfigAfterInit() public view {
-        assertEq(mom.owner(), pauseProxy, "mom owner should be pauseProxy");
-        assertEq(mom.authority(), address(chief), "mom authority should be MCD_ADM");
-        assertEq(beamState.wards(address(mom)), 1, "mom should have wards on beamState");
-        assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), address(mom)), "mom should have PAUSER_ROLE on timelock");
-    }
-
-    function testTimelockRolesAfterInit() public view {
-        assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), pauseProxy), "pauseProxy should be admin");
-        assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should be proposer");
-        assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), address(timelockWrapper)), "wrapper should be proposer");
-        assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), coreCouncil), "coreCouncil should be canceller");
-        assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), canceller), "canceller should have role");
-        assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), pauser), "pauser should have role");
-    }
-
-    function testBeamStateRolesAfterInit() public view {
-        // Timelock has DELAYED role
-        assertTrue(beamState.hasUserRole(address(timelock), uint8(PASInit.Role.DELAYED)), "timelock should have DELAYED role");
-        // CoreCouncil has IMMEDIATE role
-        assertTrue(beamState.hasUserRole(coreCouncil, uint8(PASInit.Role.IMMEDIATE)), "coreCouncil should have IMMEDIATE role");
     }
 
     function testBeamStateActionsConfigured() public view {
@@ -222,8 +202,31 @@ contract IntegrationTest is DssTest {
         assertTrue(beamState.isActionInRole(BeamState.delInitControllerActions.selector, uint8(PASInit.Role.IMMEDIATE)), "delInitControllerActions should be IMMEDIATE");
     }
 
+    function testBeamStateRolesAfterInit() public view {
+        // Timelock has DELAYED role
+        assertTrue(beamState.hasUserRole(address(timelock), uint8(PASInit.Role.DELAYED)), "timelock should have DELAYED role");
+        // CoreCouncil has IMMEDIATE role
+        assertTrue(beamState.hasUserRole(coreCouncil, uint8(PASInit.Role.IMMEDIATE)), "coreCouncil should have IMMEDIATE role");
+    }
+
     function testTimelockWrapperBudsAfterInit() public view {
         assertEq(timelockWrapper.buds(coreCouncil), 1, "coreCouncil should be whitelisted on wrapper");
+    }
+
+    function testTimelockRolesAfterInit() public view {
+        assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), pauseProxy), "pauseProxy should be admin");
+        assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should be proposer");
+        assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), address(timelockWrapper)), "wrapper should be proposer");
+        assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), coreCouncil), "coreCouncil should be canceller");
+        assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), canceller), "canceller should be canceller");
+        assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), pauser), "pauser should be pauser");
+        assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), address(mom)), "mom should be pauser");
+    }
+
+    function testMomConfigAfterInit() public view {
+        assertEq(mom.owner(), pauseProxy, "mom owner should be pauseProxy");
+        assertEq(mom.authority(), address(chief), "mom authority should be MCD_ADM");
+        assertEq(beamState.wards(address(mom)), 1, "mom should have wards on beamState");
     }
 
     // ============================================================================

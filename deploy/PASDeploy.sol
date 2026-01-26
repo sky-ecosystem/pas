@@ -32,26 +32,36 @@ library PASDeploy {
         uint256 minDelay
     ) internal returns (PASInstance memory pasInstance) {
         pasInstance.beamState = address(new BeamState());
-
         pasInstance.configurator = address(new Configurator(pasInstance.beamState));
-
         pasInstance.timelock = address(new Timelock(
             minDelay,
-            owner           // admin
+            owner
         ));
-
-        pasInstance.timelockWrapper = address(new TimelockWrapper(
-            pasInstance.timelock,
-            pasInstance.beamState
-        ));
-
-        pasInstance.mom = address(new PASMom(
-            pasInstance.beamState,
-            pasInstance.timelock
-        ));
-
         ScriptTools.switchOwner(pasInstance.beamState, deployer, owner);
-        ScriptTools.switchOwner(pasInstance.timelockWrapper, deployer, owner);
-        PASMom(pasInstance.mom).setOwner(owner);
+    }
+
+    function deployMom(
+        address owner,
+        address beamState,
+        address timelock
+    ) internal returns (address mom) {
+        mom = address(new PASMom(
+            beamState,
+            timelock
+        ));
+        PASMom(mom).setOwner(owner);
+    }
+
+    function deployTimelockWrapper(
+        address deployer,
+        address owner,
+        address timelock,
+        address beamState
+    ) internal returns (address timelockWrapper) {
+        timelockWrapper = address(new TimelockWrapper(
+            timelock,
+            beamState
+        ));
+        ScriptTools.switchOwner(timelockWrapper, deployer, owner);
     }
 }

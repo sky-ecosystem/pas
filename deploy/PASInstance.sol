@@ -20,6 +20,4 @@ struct PASInstance {
     address beamState;
     address configurator;
     address timelock;
-    address timelockWrapper;
-    address mom;
 }
