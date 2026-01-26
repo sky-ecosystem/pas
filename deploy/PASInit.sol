@@ -77,7 +77,6 @@ library PASInit {
     }
 
     function init(
-        DssInstance memory dss,
         PASInstance memory pasInstance,
         uint256            minDelay,
         address            coreCouncil,
@@ -131,22 +130,24 @@ library PASInit {
         for (uint256 i = 0; i < pausers.length; ++i) {
             timelock.grantRole(timelock.PAUSER_ROLE(), pausers[i]);
         }
+    }
 
-        // --- Chainlog ---
-
-        dss.chainlog.setAddress("PAS_STATE",        address(beamState));
-        dss.chainlog.setAddress("PAS_CONFIGURATOR", address(configurator));
-        dss.chainlog.setAddress("PAS_TIMELOCK",     address(timelock));
+    function addCoreToChainlog(
+        DssInstance memory dss,
+        PASInstance memory pasInstance
+    ) internal {
+        dss.chainlog.setAddress("PAS_STATE",        pasInstance.beamState);
+        dss.chainlog.setAddress("PAS_CONFIGURATOR", pasInstance.configurator);
+        dss.chainlog.setAddress("PAS_TIMELOCK",     pasInstance.timelock);
     }
 
     function initMom(
         DssInstance memory dss,
-        address beamState_,
-        address timelock_,
+        PASInstance memory pasInstance,
         address mom_
     ) internal {
-        BeamStateLike beamState = BeamStateLike(beamState_);
-        TimelockLike  timelock  = TimelockLike(timelock_);
+        BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
+        TimelockLike  timelock  = TimelockLike(pasInstance.timelock);
         PASMomLike    mom       = PASMomLike(mom_);
 
         // --- Sanity checks ---
@@ -169,18 +170,17 @@ library PASInit {
     }
 
     function initTimelockWrapper(
-        address timelock_,
-        address beamState_,
+        PASInstance memory pasInstance,
         address timelockWrapper_,
         address coreCouncil
     ) internal {
-        TimelockLike        timelock        = TimelockLike(timelock_);
+        TimelockLike        timelock        = TimelockLike(pasInstance.timelock);
         TimelockWrapperLike timelockWrapper = TimelockWrapperLike(timelockWrapper_);
 
         // --- Sanity checks ---
 
-        require(timelockWrapper.timelock()  == address(timelock),  "PASInit/wrapper-timelock-mismatch");
-        require(timelockWrapper.beamState() == beamState_, "PASInit/wrapper-beamState-mismatch");
+        require(timelockWrapper.timelock()  == pasInstance.timelock,  "PASInit/wrapper-timelock-mismatch");
+        require(timelockWrapper.beamState() == pasInstance.beamState, "PASInit/wrapper-beamState-mismatch");
 
         // --- Set permissions ---
 
