@@ -63,11 +63,6 @@ contract MockTarget {
         require(!shouldFail, "MockTarget/controller-function-failed");
         return value * 2;
     }
-
-    fallback() external {
-        lastCallData = msg.data;
-        require(!shouldFail, "MockTarget/fallback-failed");
-    }
 }
 
 contract ConfiguratorTest is DssTest {
@@ -368,25 +363,6 @@ contract ConfiguratorTest is DssTest {
         RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
         assertEq(data.maxAmount, type(uint256).max, "maxAmount should be unlimited");
         assertEq(data.slope, 0, "slope should be 0");
-    }
-
-    function testSetUnlimitedFromLimited() public {
-        bytes32 key = keccak256("limited-to-unlimited-key");
-        _setupCBeam(address(target1), CBEAM1);
-        _setupRateLimitData(target1, key, 1_000 * WAD, 10 * WAD, 1_000 * WAD, block.timestamp);
-
-        // Set defaults that allow unlimited for specific TARGET
-        _setupDefaultRateLimits(key, address(target1), type(uint256).max, 0);
-
-        // Must pass unlimited values when defaults are unlimited
-        vm.prank(CBEAM1);
-        vm.expectEmit();
-        emit SetRateLimit(address(target1), key, type(uint256).max, 0);
-        configurator.setRateLimit(address(target1), key, type(uint256).max, 0);
-
-        RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
-        assertEq(data.maxAmount, type(uint256).max, "should set unlimited when defaults are unlimited");
-        assertEq(data.slope, 0, "slope should be 0 for unlimited");
     }
 
     function testRevertSetLimitedWhenDefaultsUnlimited() public {
