@@ -233,7 +233,7 @@ contract TimelockWrapper {
 
     // --- Controller Actions ---
 
-    // Spark functions
+    // Shared Spark & Grove functions
 
     // Role bytes32 can be computed off-chain and passed as parameter, e.g keccak256("RELAYER"), keccak256("FREEZER")
     function grantRole(
@@ -331,6 +331,29 @@ contract TimelockWrapper {
         emit ProposalSubmitted(operationId, "setMaxSlippage");
     }
     
+    function setMaxExchangeRate(
+        address token,
+        uint256 shares,
+        uint256 maxExpectedAssets,
+        address controller,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            ControllerLike.setMaxExchangeRate.selector,
+            token,
+            shares,
+            maxExpectedAssets
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setMaxExchangeRate");
+    }
+
+    // Spark-only functions
+
     function setOTCBuffer(
         address exchange,
         address otcBuffer,
@@ -388,27 +411,6 @@ contract TimelockWrapper {
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setOTCWhitelistedAsset");
-    }
-    
-    function setMaxExchangeRate(
-        address token,
-        uint256 shares,
-        uint256 maxExpectedAssets,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setMaxExchangeRate.selector,
-            token,
-            shares,
-            maxExpectedAssets
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setMaxExchangeRate");
     }
 
     // Grove-only functions
@@ -508,4 +510,3 @@ contract TimelockWrapper {
         emit ProposalSubmitted(operationId, "setCentrifugeRecipient");
     }
 }
-
