@@ -71,7 +71,7 @@ contract IntegrationTest is DssTest {
     BeamState              beamState;
     Configurator           configurator;
     Timelock               timelock;
-    TimelockWrapperMainnet timelockWrapperMainnet;
+    TimelockWrapperMainnet wrapper;
     PASMom                 mom;
     ChiefLike              chief;
 
@@ -123,9 +123,9 @@ contract IntegrationTest is DssTest {
         beamState    = BeamState(pas.beamState);
         configurator = Configurator(pas.configurator);
         timelock     = Timelock(payable(pas.timelock));
-        // Deploy Mom and TimelockWrapperMainnet separately
-        mom                    = PASMom(PASDeploy.deployMom(pauseProxy, pas.beamState, pas.timelock));
-        timelockWrapperMainnet = TimelockWrapperMainnet(PASDeploy.deployTimelockWrapperMainnet(address(this), pauseProxy, pas.timelock, pas.beamState));
+        // Deploy Mom and TimelockWrapper separately
+        mom     = PASMom(PASDeploy.deployMom(pauseProxy, pas.beamState, pas.timelock));
+        wrapper = TimelockWrapperMainnet(PASDeploy.deployTimelockWrapperMainnet(address(this), pauseProxy, pas.timelock, pas.beamState));
 
         chief = ChiefLike(dss.chainlog.getAddress("MCD_ADM"));
 
@@ -140,7 +140,7 @@ contract IntegrationTest is DssTest {
         PASInit.init(pas, MIN_DELAY, coreCouncil, cancellers, pausers);
         PASInit.addCoreToChainlog(dss, pas);
         PASInit.initMom(dss, pas, address(mom));
-        PASInit.initTimelockWrapperMainnet(pas, address(timelockWrapperMainnet), coreCouncil);
+        PASInit.initTimelockWrapper(pas, address(wrapper), coreCouncil);
         vm.stopPrank();
     }
 
@@ -153,7 +153,7 @@ contract IntegrationTest is DssTest {
         assertTrue(pas.configurator != address(0), "configurator should be deployed");
         assertTrue(pas.timelock != address(0), "timelock should be deployed");
         assertTrue(address(mom) != address(0), "mom should be deployed");
-        assertTrue(address(timelockWrapperMainnet) != address(0), "timelockWrapperMainnet should be deployed");
+        assertTrue(address(wrapper) != address(0), "wrapper should be deployed");
     }
 
     function testConfiguratorLinkedToBeamState() public view {
@@ -166,9 +166,9 @@ contract IntegrationTest is DssTest {
         assertEq(mom.owner(), pauseProxy, "mom should be owned by pauseProxy");
     }
 
-    function testTimelockWrapperMainnetLinkedCorrectly() public view {
-        assertEq(address(timelockWrapperMainnet.timelock()), address(timelock), "wrapper should reference timelock");
-        assertEq(address(timelockWrapperMainnet.beamState()), address(beamState), "wrapper should reference beamState");
+    function testTimelockWrapperLinkedCorrectly() public view {
+        assertEq(address(wrapper.timelock()), address(timelock), "wrapper should reference timelock");
+        assertEq(address(wrapper.beamState()), address(beamState), "wrapper should reference beamState");
     }
 
     function testChainlogEntriesAfterInit() public view {
@@ -209,14 +209,14 @@ contract IntegrationTest is DssTest {
         assertTrue(beamState.hasUserRole(coreCouncil, uint8(PASInit.Role.IMMEDIATE)), "coreCouncil should have IMMEDIATE role");
     }
 
-    function testTimelockWrapperMainnetBudsAfterInit() public view {
-        assertEq(timelockWrapperMainnet.buds(coreCouncil), 1, "coreCouncil should be whitelisted on wrapper");
+    function testTimelockWrapperBudsAfterInit() public view {
+        assertEq(wrapper.buds(coreCouncil), 1, "coreCouncil should be whitelisted on wrapper");
     }
 
     function testTimelockRolesAfterInit() public view {
         assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), pauseProxy), "pauseProxy should be admin");
         assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should be proposer");
-        assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), address(timelockWrapperMainnet)), "wrapper should be proposer");
+        assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), address(wrapper)), "wrapper should be proposer");
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), coreCouncil), "coreCouncil should be canceller");
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), canceller), "canceller should be canceller");
         assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), pauser), "pauser should be pauser");
@@ -479,7 +479,7 @@ contract IntegrationTest is DssTest {
 
         // Schedule start via wrapper
         vm.prank(coreCouncil);
-        bytes32 operationId = timelockWrapperMainnet.start(bytes32(0), SALT, MIN_DELAY);
+        bytes32 operationId = wrapper.start(bytes32(0), SALT, MIN_DELAY);
 
         vm.warp(block.timestamp + MIN_DELAY);
 
@@ -496,7 +496,7 @@ contract IntegrationTest is DssTest {
     function testCoreCouncilCanCancelOperation() public {
         // Schedule operation
         vm.prank(coreCouncil);
-        bytes32 operationId = timelockWrapperMainnet.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        bytes32 operationId = wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
 
         assertTrue(timelock.isOperationPending(operationId), "operation should be pending");
 
@@ -510,7 +510,7 @@ contract IntegrationTest is DssTest {
 
     function testCancellerCanCancelOperation() public {
         vm.prank(coreCouncil);
-        bytes32 operationId = timelockWrapperMainnet.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        bytes32 operationId = wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
 
         vm.prank(canceller);
         timelock.cancel(operationId);
@@ -535,13 +535,13 @@ contract IntegrationTest is DssTest {
 
         vm.prank(coreCouncil);
         vm.expectRevert();
-        timelockWrapperMainnet.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
     }
 
     function testPausedTimelockBlocksExecution() public {
         // Schedule first
         vm.prank(coreCouncil);
-        bytes32 operationId = timelockWrapperMainnet.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        bytes32 operationId = wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
 
         vm.warp(block.timestamp + MIN_DELAY);
 
@@ -621,15 +621,15 @@ contract IntegrationTest is DssTest {
     function testFullOnboardingWorkflow() public {
         // 1. CoreCouncil schedules adding a cBeam via wrapper
         vm.prank(coreCouncil);
-        bytes32 addCBeamOp = timelockWrapperMainnet.addCBeam(cBeam, bytes32(0), keccak256("step1"), MIN_DELAY);
+        bytes32 addCBeamOp = wrapper.addCBeam(cBeam, bytes32(0), keccak256("step1"), MIN_DELAY);
 
         // 2. Schedule addRateLimits with predecessor
         vm.prank(coreCouncil);
-        bytes32 addRateLimitsOp = timelockWrapperMainnet.addRateLimits(SPARK_RATE_LIMITS, addCBeamOp, keccak256("step2"), MIN_DELAY);
+        bytes32 addRateLimitsOp = wrapper.addRateLimits(SPARK_RATE_LIMITS, addCBeamOp, keccak256("step2"), MIN_DELAY);
 
         // 3. Schedule setHop with predecessor
         vm.prank(coreCouncil);
-        bytes32 setHopOp = timelockWrapperMainnet.setHop(SPARK_RATE_LIMITS, 4 hours, addRateLimitsOp, keccak256("step3"), MIN_DELAY);
+        bytes32 setHopOp = wrapper.setHop(SPARK_RATE_LIMITS, 4 hours, addRateLimitsOp, keccak256("step3"), MIN_DELAY);
 
         // Wait for delay
         vm.warp(block.timestamp + MIN_DELAY);
@@ -659,7 +659,7 @@ contract IntegrationTest is DssTest {
 
         // 7. Restart requires timelock
         vm.prank(coreCouncil);
-        bytes32 startOp = timelockWrapperMainnet.start(bytes32(0), keccak256("restart"), MIN_DELAY);
+        bytes32 startOp = wrapper.start(bytes32(0), keccak256("restart"), MIN_DELAY);
 
         vm.warp(block.timestamp + MIN_DELAY);
 
@@ -786,13 +786,13 @@ contract IntegrationTest is DssTest {
         // Scheduling via wrapper is blocked
         vm.prank(coreCouncil);
         vm.expectRevert();
-        timelockWrapperMainnet.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
     }
 
     function testMomPauseBlocksTimelockExecution() public {
         // Schedule an operation first
         vm.prank(coreCouncil);
-        bytes32 operationId = timelockWrapperMainnet.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        bytes32 operationId = wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
 
         vm.warp(block.timestamp + MIN_DELAY);
 
@@ -842,27 +842,27 @@ contract IntegrationTest is DssTest {
         {
             // 1a. Schedule addCBeam
             vm.prank(coreCouncil);
-            opIds[0] = timelockWrapperMainnet.addCBeam(cBeam, bytes32(0), keccak256("addCBeam"), MIN_DELAY);
+            opIds[0] = wrapper.addCBeam(cBeam, bytes32(0), keccak256("addCBeam"), MIN_DELAY);
 
             // 1b. Schedule addRateLimits for SPARK_RATE_LIMITS
             vm.prank(coreCouncil);
-            opIds[1] = timelockWrapperMainnet.addRateLimits(SPARK_RATE_LIMITS, opIds[0], keccak256("addRateLimits"), MIN_DELAY);
+            opIds[1] = wrapper.addRateLimits(SPARK_RATE_LIMITS, opIds[0], keccak256("addRateLimits"), MIN_DELAY);
 
             // 1c. Schedule addController for SPARK_CONTROLLER
             vm.prank(coreCouncil);
-            opIds[2] = timelockWrapperMainnet.addController(SPARK_CONTROLLER, opIds[1], keccak256("addController"), MIN_DELAY);
+            opIds[2] = wrapper.addController(SPARK_CONTROLLER, opIds[1], keccak256("addController"), MIN_DELAY);
 
             // 1d. Schedule setHop for rateLimits
             vm.prank(coreCouncil);
-            opIds[3] = timelockWrapperMainnet.setHop(SPARK_RATE_LIMITS, 1 hours, opIds[2], keccak256("setHop"), MIN_DELAY);
+            opIds[3] = wrapper.setHop(SPARK_RATE_LIMITS, 1 hours, opIds[2], keccak256("setHop"), MIN_DELAY);
 
             // 1e. Schedule setMaxChange for rateLimits
             vm.prank(coreCouncil);
-            opIds[4] = timelockWrapperMainnet.setMaxChange(SPARK_RATE_LIMITS, 2 ether, opIds[3], keccak256("setMaxChange"), MIN_DELAY);
+            opIds[4] = wrapper.setMaxChange(SPARK_RATE_LIMITS, 2 ether, opIds[3], keccak256("setMaxChange"), MIN_DELAY);
 
             // 1f. Schedule addInitRateLimits (via wrapper with RateLimitConfig)
             vm.prank(coreCouncil);
-            opIds[5] = timelockWrapperMainnet.addInitRateLimits(
+            opIds[5] = wrapper.addInitRateLimits(
                 RateLimitConfig({key: rateLimitKey, rateLimits: SPARK_RATE_LIMITS, maxAmount: 1_000_000e18, slope: 100_000e18}),
                 opIds[4], keccak256("addInitRateLimits"), MIN_DELAY
             );
@@ -975,7 +975,7 @@ contract IntegrationTest is DssTest {
 
         // 4e. Operations resume after restart (via timelock)
         vm.prank(coreCouncil);
-        bytes32 startOp = timelockWrapperMainnet.start(bytes32(0), keccak256("restart"), MIN_DELAY);
+        bytes32 startOp = wrapper.start(bytes32(0), keccak256("restart"), MIN_DELAY);
 
         vm.warp(block.timestamp + MIN_DELAY);
         {

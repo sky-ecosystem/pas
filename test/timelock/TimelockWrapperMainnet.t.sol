@@ -112,7 +112,7 @@ contract TimelockWrapperMainnetTest is DssTest {
 
         vm.startPrank(pauseProxy);
         PASInit.init(pas, MIN_DELAY, coreCouncil, new address[](0), new address[](0));
-        PASInit.initTimelockWrapperMainnet(pas, address(wrapper), coreCouncil);
+        PASInit.initTimelockWrapper(pas, address(wrapper), coreCouncil);
         vm.stopPrank();
 
         // Grant configurator admin role on mainnet controllers and rate limiters
