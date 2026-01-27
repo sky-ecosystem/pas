@@ -61,7 +61,6 @@ contract IntegrationTest is DssTest {
     address constant SPARK_CONTROLLER = 0xE52d643B27601D4d2BAB2052f30cf936ed413cec;
     address constant SPARK_PROXY      = 0x3300f198988e4C9C63F75dF86De36421f06af8c4;
     address constant CHAINLOG         = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
-    uint256 constant FORK_BLOCK       = 24250000;
     bytes32 constant OZ_DEFAULT_ADMIN_ROLE = bytes32(0);
 
     // Fetched from controller
@@ -103,7 +102,7 @@ contract IntegrationTest is DssTest {
 
     function setUp() public {
         // Fork mainnet at specified block
-        vm.createSelectFork(vm.envString("ETH_RPC_URL"), FORK_BLOCK);
+        vm.createSelectFork(vm.envString("ETH_RPC_URL"));
 
         // Load DssInstance from chainlog
         dss = MCD.loadFromChainlog(CHAINLOG);

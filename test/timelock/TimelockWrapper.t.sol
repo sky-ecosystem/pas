@@ -69,7 +69,6 @@ contract TimelockWrapperTest is DssTest {
 
     address constant CHAINLOG         = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
 
-    uint256 constant FORK_BLOCK = 24250000;
     uint256 constant MIN_DELAY  = 1 days;
 
     bytes32 constant OZ_DEFAULT_ADMIN_ROLE = bytes32(0);
@@ -91,7 +90,7 @@ contract TimelockWrapperTest is DssTest {
     address cBeam;
 
     function setUp() public {
-        vm.createSelectFork(vm.envString("ETH_RPC_URL"), FORK_BLOCK);
+        vm.createSelectFork(vm.envString("ETH_RPC_URL"));
 
         // Load DssInstance from chainlog
         dss = MCD.loadFromChainlog(CHAINLOG);
