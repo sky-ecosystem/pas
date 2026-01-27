@@ -20,6 +20,7 @@ import { DssInstance } from "dss-test/MCD.sol";
 import { PASInstance } from "./PASInstance.sol";
 
 interface BeamStateLike {
+    function rely(address) external;
     function setUserRole(address, uint8, bool) external;
     function setRoleAction(uint8, bytes4, bool) external;
     function stop() external;
@@ -60,6 +61,12 @@ interface TimelockWrapperLike {
     function kiss(address) external;
 }
 
+interface PASMomLike {
+    function beamState() external view returns (address);
+    function timelock() external view returns (address);
+    function setAuthority(address) external;
+}
+
 library PASInit {
     uint256 constant internal WAD = 10**18;
 
@@ -70,24 +77,20 @@ library PASInit {
     }
 
     function init(
-        DssInstance memory dss,
         PASInstance memory pasInstance,
         uint256            minDelay,
         address            coreCouncil,
         address[]   memory cancellers,
         address[]   memory pausers
     ) internal {
-        BeamStateLike       beamState       = BeamStateLike(pasInstance.beamState);
-        ConfiguratorLike    configurator    = ConfiguratorLike(pasInstance.configurator);
-        TimelockLike        timelock        = TimelockLike(pasInstance.timelock);
-        TimelockWrapperLike timelockWrapper = TimelockWrapperLike(pasInstance.timelockWrapper);
+        BeamStateLike    beamState    = BeamStateLike(pasInstance.beamState);
+        ConfiguratorLike configurator = ConfiguratorLike(pasInstance.configurator);
+        TimelockLike     timelock     = TimelockLike(pasInstance.timelock);
 
         // --- Sanity checks ---
 
-        require(configurator.beamState()    == address(beamState),    "PASInit/configurator-beamState-mismatch");
-        require(timelock.getMinDelay()      == minDelay,              "PASInit/timelock-minDelay-mismatch");
-        require(timelockWrapper.timelock()  == address(timelock),     "PASInit/wrapper-timelock-mismatch");
-        require(timelockWrapper.beamState() == address(beamState),    "PASInit/wrapper-beamState-mismatch");
+        require(configurator.beamState() == address(beamState), "PASInit/configurator-beamState-mismatch");
+        require(timelock.getMinDelay()   == minDelay,           "PASInit/timelock-minDelay-mismatch");
 
         // --- Configure BeamState ---
 
@@ -117,10 +120,9 @@ library PASInit {
 
         // --- Configure Timelock and Wrapper ---
 
-        // Grant the coreCouncil as the proposer in the timelock either directly or through the wrapper
+        // Grant the coreCouncil as the proposer in the timelock directly
         // Grant cancellers and pausers in timelock with their respective roles
         timelock.grantRole(timelock.PROPOSER_ROLE(),  coreCouncil);
-        timelock.grantRole(timelock.PROPOSER_ROLE(),  address(timelockWrapper));
         timelock.grantRole(timelock.CANCELLER_ROLE(), coreCouncil);
         for (uint256 i = 0; i < cancellers.length; ++i) {
             timelock.grantRole(timelock.CANCELLER_ROLE(), cancellers[i]);
@@ -128,12 +130,62 @@ library PASInit {
         for (uint256 i = 0; i < pausers.length; ++i) {
             timelock.grantRole(timelock.PAUSER_ROLE(), pausers[i]);
         }
-        timelockWrapper.kiss(coreCouncil);
+    }
+
+    function addCoreToChainlog(
+        DssInstance memory dss,
+        PASInstance memory pasInstance
+    ) internal {
+        dss.chainlog.setAddress("PAS_STATE",        pasInstance.beamState);
+        dss.chainlog.setAddress("PAS_CONFIGURATOR", pasInstance.configurator);
+        dss.chainlog.setAddress("PAS_TIMELOCK",     pasInstance.timelock);
+    }
+
+    function initMom(
+        DssInstance memory dss,
+        PASInstance memory pasInstance,
+        address mom_
+    ) internal {
+        BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
+        TimelockLike  timelock  = TimelockLike(pasInstance.timelock);
+        PASMomLike    mom       = PASMomLike(mom_);
+
+        // --- Sanity checks ---
+
+        require(mom.beamState() == address(beamState), "PASInit/mom-beamState-mismatch");
+        require(mom.timelock()  == address(timelock),  "PASInit/mom-timelock-mismatch");
+
+        // --- Set permissions ---
+
+        // Rely Mom on BeamState to call stop()
+        beamState.rely(address(mom));
+        // Give Mom the PAUSER_ROLE to call pause() on Timelock
+        timelock.grantRole(timelock.PAUSER_ROLE(), address(mom));
+        // Set Mom's authority to MCD_ADM
+        mom.setAuthority(dss.chainlog.getAddress("MCD_ADM"));
 
         // --- Chainlog ---
 
-        dss.chainlog.setAddress("PAS_STATE",        address(beamState));
-        dss.chainlog.setAddress("PAS_CONFIGURATOR", address(configurator));
-        dss.chainlog.setAddress("PAS_TIMELOCK",     address(timelock));
+        dss.chainlog.setAddress("PAS_MOM", address(mom));
+    }
+
+    function initTimelockWrapper(
+        PASInstance memory pasInstance,
+        address timelockWrapper_,
+        address coreCouncil
+    ) internal {
+        TimelockLike        timelock        = TimelockLike(pasInstance.timelock);
+        TimelockWrapperLike timelockWrapper = TimelockWrapperLike(timelockWrapper_);
+
+        // --- Sanity checks ---
+
+        require(timelockWrapper.timelock()  == pasInstance.timelock,  "PASInit/wrapper-timelock-mismatch");
+        require(timelockWrapper.beamState() == pasInstance.beamState, "PASInit/wrapper-beamState-mismatch");
+
+        // --- Set permissions ---
+
+        // Grant the coreCouncil as the proposer through the wrapper
+        timelock.grantRole(timelock.PROPOSER_ROLE(), address(timelockWrapper));
+        timelockWrapper.kiss(coreCouncil);
     }
 }

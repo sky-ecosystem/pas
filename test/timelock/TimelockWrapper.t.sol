@@ -106,15 +106,15 @@ contract TimelockWrapperTest is DssTest {
         pauseProxy = dss.chainlog.getAddress("MCD_PAUSE_PROXY");
 
         PASInstance memory pas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
-
-        vm.startPrank(pauseProxy);
-        PASInit.init(dss, pas, MIN_DELAY, coreCouncil, new address[](0), new address[](0));
-        vm.stopPrank();
-
         beamState    = BeamState(pas.beamState);
         configurator = Configurator(pas.configurator);
         timelock     = Timelock(payable(pas.timelock));
-        wrapper      = TimelockWrapper(pas.timelockWrapper);
+        wrapper      = TimelockWrapper(PASDeploy.deployTimelockWrapper(address(this), pauseProxy, pas.timelock, pas.beamState));
+
+        vm.startPrank(pauseProxy);
+        PASInit.init(pas, MIN_DELAY, coreCouncil, new address[](0), new address[](0));
+        PASInit.initTimelockWrapper(pas, address(wrapper), coreCouncil);
+        vm.stopPrank();
 
         // Grant configurator admin role on mainnet controllers and rate limiters
         vm.startPrank(SPARK_PROXY);

@@ -23,9 +23,12 @@ import { BeamState } from "../src/BeamState.sol";
 // Mock TARGET contract implementing RateLimits interface
 contract MockTarget {
     mapping(bytes32 key => RateLimitsLike.RateLimitData) public rateLimitData;
-    mapping(bytes32 key => uint256) public currentRateLimit;
     bool public shouldFail;
     bytes public lastCallData;
+
+    function _min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
+    }
 
     function setRateLimitData(
         bytes32 key,
@@ -45,12 +48,16 @@ contract MockTarget {
         return rateLimitData[key];
     }
 
+    // Mimics real RateLimits: regenerates based on slope and elapsed time
     function getCurrentRateLimit(bytes32 key) external view returns (uint256) {
-        return currentRateLimit[key];
-    }
-
-    function setCurrentRateLimit(bytes32 key, uint256 _current) external {
-        currentRateLimit[key] = _current;
+        RateLimitsLike.RateLimitData memory d = rateLimitData[key];
+        if (d.maxAmount == type(uint256).max) {
+            return type(uint256).max;
+        }
+        return _min(
+            d.slope * (block.timestamp - d.lastUpdated) + d.lastAmount,
+            d.maxAmount
+        );
     }
 
     function setShouldFail(bool _fail) external {
@@ -116,7 +123,6 @@ contract ConfiguratorTest is DssTest {
         uint256 lastUpdated
     ) internal {
         target.setRateLimitData(key, maxAmount, slope, lastAmount, lastUpdated);
-        target.setCurrentRateLimit(key, lastAmount);
     }
 
     function _setupDefaultRateLimits(bytes32 key, address target, uint256 maxAmount, uint256 slope) internal {
@@ -156,7 +162,7 @@ contract ConfiguratorTest is DssTest {
         configurator.setRateLimit(address(target2), key, 1_000 * WAD, 10 * WAD);
     }
 
-    // --- Safe Rate Limit Changes Tests ---
+    // --- Decrease Rate Limit Tests (no hop required) ---
 
     function testSetRateLimitDecreasing() public {
         bytes32 key = keccak256("decreasing-key");
@@ -180,7 +186,9 @@ contract ConfiguratorTest is DssTest {
         _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
         _setupRateLimitData(target1, key, 500 * WAD, 5 * WAD, 500 * WAD, block.timestamp);
 
-        // Increase but stay within defaults is safe
+        vm.warp(block.timestamp + 86_400); // Any increase requires hop
+
+        // Increase but stay within defaults (ceiling is max of current*maxChange and default)
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 800 * WAD, 8 * WAD);
 
@@ -195,7 +203,7 @@ contract ConfiguratorTest is DssTest {
         _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
         _setupRateLimitData(target1, key, 500 * WAD, 5 * WAD, 500 * WAD, block.timestamp);
 
-        // Decrease maxAmount, keep slope same - still safe
+        // Decrease maxAmount, keep slope same - no hop required
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 400 * WAD, 5 * WAD);
 
@@ -204,7 +212,7 @@ contract ConfiguratorTest is DssTest {
         assertEq(data.slope, 5 * WAD, "slope should stay same");
     }
 
-    // --- Unsafe Rate Limit Changes Tests ---
+    // --- Increase Rate Limit Tests (hop required) ---
 
     function testSetRateLimitIncreasingTooSoon() public {
         bytes32 key = keccak256("too-soon-key");
@@ -216,7 +224,7 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 3_600); // Warp to allow first increase
 
-        // First increase beyond defaults (unsafe, respects maxChange)
+        // First increase (respects maxChange ceiling)
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_300 * WAD, 13 * WAD); // 1.3x from current
 
@@ -244,7 +252,7 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 3_600); // Warp to allow first increase
 
-        // First increase beyond defaults (unsafe, respects maxChange 1.5x)
+        // First increase (respects maxChange ceiling 1.5x)
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 3_000 * WAD, 25 * WAD); // Exactly at defaults, 1.5x maxAmount, 1.25x slope
 
@@ -270,9 +278,9 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 1); // Warp past hop to allow attempt
 
-        // Try to increase more than maxChange allows (beyond defaults and beyond maxChange)
+        // Try to increase more than ceiling allows
         vm.prank(CBEAM1);
-        vm.expectRevert("Configurator/maxChange-maxAmount");
+        vm.expectRevert("Configurator/exceeds-max-amount");
         configurator.setRateLimit(address(target1), key, 1_300 * WAD, 8 * WAD); // 1.625x increase (> 1.5x)
     }
 
@@ -286,9 +294,9 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 1); // Warp past hop to allow attempt
 
-        // Try to increase slope more than maxChange allows (beyond defaults and beyond maxChange)
+        // Try to increase slope more than ceiling allows
         vm.prank(CBEAM1);
-        vm.expectRevert("Configurator/maxChange-slope");
+        vm.expectRevert("Configurator/exceeds-max-slope");
         configurator.setRateLimit(address(target1), key, 1_000 * WAD, 13 * WAD); // 1.625x increase (> 1.5x)
     }
 
@@ -385,10 +393,12 @@ contract ConfiguratorTest is DssTest {
         bytes32 key = keccak256("cap-key");
         _setupCBeam(address(target1), CBEAM1);
         _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
+        // Current: maxAmount=2000, slope=20, lastAmount=1500
+        // getCurrentRateLimit (no time elapsed) = min(20*0 + 1500, 2000) = 1500
         _setupRateLimitData(target1, key, 2_000 * WAD, 20 * WAD, 1_500 * WAD, block.timestamp);
-        target1.setCurrentRateLimit(key, 1_500 * WAD);
 
-        // Decrease maxAmount below current lastAmount
+        // Decrease maxAmount below current rate limit (1500 -> 1000)
+        // lastAmount = min(newMaxAmount, currentRateLimit) = min(1000, 1500) = 1000
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_000 * WAD, 10 * WAD);
 
@@ -400,15 +410,21 @@ contract ConfiguratorTest is DssTest {
         bytes32 key = keccak256("preserve-key");
         _setupCBeam(address(target1), CBEAM1);
         _setupDefaultRateLimits(key, address(target1), 2_000 * WAD, 20 * WAD);
-        _setupRateLimitData(target1, key, 1_000 * WAD, 10 * WAD, 500 * WAD, block.timestamp);
-        target1.setCurrentRateLimit(key, 500 * WAD);
+        // Current: maxAmount=1000, slope=10, lastAmount=100
+        // Use small lastAmount so regeneration after hop doesn't hit maxAmount
+        _setupRateLimitData(target1, key, 1_000 * WAD, 10 * WAD, 100 * WAD, block.timestamp);
+        beamState.setHop(address(target1), 1); // 1 second hop
 
-        // Increase maxAmount
+        vm.warp(block.timestamp + 1); // Minimal warp to satisfy hop
+        // After 1s: getCurrentRateLimit = min(10*1 + 100, 1000) = 110 WAD
+
+        // Increase maxAmount to 1500 (above current rate limit of 110)
+        // lastAmount = min(newMaxAmount, currentRateLimit) = min(1500, 110) = 110
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_500 * WAD, 15 * WAD);
 
         RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
-        assertEq(data.lastAmount, 500 * WAD, "lastAmount should be preserved when below new max");
+        assertEq(data.lastAmount, 110 * WAD, "lastAmount should be preserved when below new max");
     }
 
     // --- Global Default Fallback Tests ---
@@ -418,6 +434,8 @@ contract ConfiguratorTest is DssTest {
         _setupCBeam(address(target1), CBEAM1);
         _setupDefaultRateLimits(key, address(0), 1_000 * WAD, 10 * WAD); // Global defaults
         _setupRateLimitData(target1, key, 500 * WAD, 5 * WAD, 500 * WAD, block.timestamp);
+
+        vm.warp(block.timestamp + 86_400); // Any increase requires hop
 
         // Should use global defaults
         vm.prank(CBEAM1);
@@ -434,6 +452,8 @@ contract ConfiguratorTest is DssTest {
         _setupDefaultRateLimits(key, address(0), 1_000 * WAD, 10 * WAD); // Global
         _setupDefaultRateLimits(key, address(target1), 2_000 * WAD, 20 * WAD); // Specific
         _setupRateLimitData(target1, key, 500 * WAD, 5 * WAD, 500 * WAD, block.timestamp);
+
+        vm.warp(block.timestamp + 86_400); // Any increase requires hop
 
         // Should use TARGET1 specific defaults (higher limits)
         vm.prank(CBEAM1);
@@ -456,11 +476,11 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 86_400); // Warp to allow first increase
 
-        // First increase beyond defaults (unsafe)
+        // First increase (sets zzz)
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_100 * WAD, 11 * WAD);
 
-        // Try second increase immediately - should fail due to global hop
+        // Try second increase immediately - should fail due to hop
         vm.prank(CBEAM1);
         vm.expectRevert("Configurator/increment-too-soon");
         configurator.setRateLimit(address(target1), key, 1_200 * WAD, 12 * WAD);
@@ -478,9 +498,9 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 86_400); // Wait for hop
 
-        // Try to increase by 1.67x - should fail due to global maxChange of 1.5x (beyond defaults)
+        // Try to increase by 1.67x - should fail due to global maxChange ceiling of 1.5x
         vm.prank(CBEAM1);
-        vm.expectRevert("Configurator/maxChange-maxAmount");
+        vm.expectRevert("Configurator/exceeds-max-amount");
         configurator.setRateLimit(address(target1), key, 1_500 * WAD, 9 * WAD);
     }
 
@@ -499,11 +519,11 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 3_600); // Warp to specific hop (shorter than global)
 
-        // First increase beyond defaults (unsafe)
+        // First increase (sets zzz)
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_100 * WAD, 11 * WAD);
 
-        // Try second increase immediately - should fail due to specific hop
+        // Try second increase immediately - should fail due to hop
         vm.prank(CBEAM1);
         vm.expectRevert("Configurator/increment-too-soon");
         configurator.setRateLimit(address(target1), key, 1_200 * WAD, 12 * WAD);
@@ -547,7 +567,7 @@ contract ConfiguratorTest is DssTest {
 
         // Try to exceed the specific maxChange (2x) - should fail
         vm.prank(CBEAM1);
-        vm.expectRevert("Configurator/maxChange-maxAmount");
+        vm.expectRevert("Configurator/exceeds-max-amount");
         configurator.setRateLimit(address(target1), key, 3_100 * WAD, 15 * WAD); // >2x from 1500
     }
 
@@ -634,16 +654,16 @@ contract ConfiguratorTest is DssTest {
         beamState.setHop(address(target1), 3_600);
         beamState.setMaxChange(address(target1), 2 * WAD); // 2x
 
-        vm.warp(block.timestamp + 3_600); // Warp to allow first unsafe increase
+        vm.warp(block.timestamp + 3_600); // Warp to allow first increase
 
-        // 1. Decrease limits (safe, immediate)
+        // 1. Decrease limits (immediate, no hop required)
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 700 * WAD, 7 * WAD);
 
         RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
         assertEq(data.maxAmount, 700 * WAD, "step 1: decrease should work immediately");
 
-        // 2. Increase limits beyond defaults (unsafe, sets timestamp)
+        // 2. Increase limits (sets zzz timestamp)
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_200 * WAD, 12 * WAD);
 
@@ -671,7 +691,7 @@ contract ConfiguratorTest is DssTest {
         // 6. Try to exceed maxChange
         vm.warp(block.timestamp + 3_600);
         vm.prank(CBEAM1);
-        vm.expectRevert("Configurator/maxChange-maxAmount");
+        vm.expectRevert("Configurator/exceeds-max-amount");
         configurator.setRateLimit(address(target1), key, 4_900 * WAD, 24 * WAD); // >2x (2.04x)
     }
 
@@ -687,6 +707,8 @@ contract ConfiguratorTest is DssTest {
         _setupCBeam(address(target2), CBEAM2);
         _setupDefaultRateLimits(key, address(target2), 2_000 * WAD, 20 * WAD);
         _setupRateLimitData(target2, key, 1_000 * WAD, 10 * WAD, 1_000 * WAD, block.timestamp);
+
+        vm.warp(block.timestamp + 86_400); // Any increase requires hop
 
         // CBEAM1 configures TARGET1
         vm.prank(CBEAM1);
@@ -718,27 +740,33 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 3_600); // Warp to allow first increase
 
-        // Increase beyond defaults (sets zzz)
+        // Increase, sets zzz
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_100 * WAD, 11 * WAD);
         uint256 zzzAfterIncrease = configurator.zzz(address(target1), key);
         assertGt(zzzAfterIncrease, 0, "zzz should be set after increase");
 
-        // Decrease (doesn't update zzz for the decrease itself, but allows future increases)
+        // Decrease (doesn't update zzz)
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 900 * WAD, 9 * WAD);
         assertEq(configurator.zzz(address(target1), key), zzzAfterIncrease, "zzz should not change on decrease");
 
-        // Immediate increase (within defaults now) should work
+        // Immediate increase doesn't work, requires hop
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/increment-too-soon");
+        configurator.setRateLimit(address(target1), key, 1_000 * WAD, 10 * WAD);
+
+        // After hop, increase within defaults should work
+        vm.warp(block.timestamp + 3_600);
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_000 * WAD, 10 * WAD);
 
-        // Increase beyond defaults should respect hop from first increase
+        // Immediate increase should fail (hop just used)
         vm.prank(CBEAM1);
         vm.expectRevert("Configurator/increment-too-soon");
         configurator.setRateLimit(address(target1), key, 1_200 * WAD, 12 * WAD);
 
-        // After hop, increase should work
+        // After another hop, increase should work
         vm.warp(block.timestamp + 3_600);
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_200 * WAD, 12 * WAD);
@@ -775,7 +803,7 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 3_600); // Warp to allow first increase
 
-        // Increase key1 beyond defaults
+        // Increase key1 (sets zzz for key1)
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key1, 1_100 * WAD, 11 * WAD);
 
@@ -800,6 +828,8 @@ contract ConfiguratorTest is DssTest {
         _setupCBeam(address(target1), CBEAM1);
         _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
         _setupRateLimitData(target1, key, 500 * WAD, 5 * WAD, 500 * WAD, block.timestamp);
+
+        vm.warp(block.timestamp + 86_400); // Any increase requires hop
 
         // Stop the BeamState
         beamState.stop();
