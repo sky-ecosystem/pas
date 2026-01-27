@@ -22,8 +22,8 @@ import { Timelock } from "src/timelock/Timelock.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
 import { PASDeploy } from "deploy/PASDeploy.sol";
-import { PASInit } from "deploy/PASInit.sol";
 import { PASInstance } from "deploy/PASInstance.sol";
+import { L2PASSpell } from "deploy/L2PASSpell.sol";
 
 interface ControllerLike {
     function hasRole(bytes32 role, address account) external view returns (bool);
@@ -49,6 +49,18 @@ interface RateLimitsLike {
     function getRateLimitData(bytes32 key) external view returns (uint256, uint256, uint256, uint256);
 }
 
+contract GovRelayMock {
+    function relay(address target, bytes calldata targetData) external {
+        (bool success, bytes memory result) = target.delegatecall(targetData);
+        if (!success) {
+            if (result.length == 0) revert("L2GovernanceRelay/delegatecall-error");
+            assembly ("memory-safe") {
+                revert(add(32, result), mload(result))
+            }
+        }
+    }
+}
+
 contract TimelockWrapperForeignTest is DssTest {
     // --- Events ---
     event Kiss(address indexed usr);
@@ -62,8 +74,6 @@ contract TimelockWrapperForeignTest is DssTest {
     // https://github.com/grove-labs/grove-address-registry/blob/master/src/Base.sol
     address constant GROVE_CONTROLLER = 0x7f8408eBbBC3504F83eeDa52910dd75Eba92C955;
     address constant GROVE_PROXY      = 0x491EDFB0B8b608044e227225C715981a30F3A44E;
-
-    address constant GOV_RELAY        = 0xdD0BCc201C9E47c6F6eE68E4dB05b652Bb6aC255;
 
     uint256 constant FORK_BLOCK = 41300000;
     uint256 constant MIN_DELAY  = 1 days;
@@ -80,8 +90,9 @@ contract TimelockWrapperForeignTest is DssTest {
     Timelock               timelock;
     TimelockWrapperForeign wrapper;
 
-    address coreCouncil;
-    address cBeam;
+    GovRelayMock govRelay;
+    address      coreCouncil;
+    address      cBeam;
 
     function setUp() public {
         vm.createSelectFork(vm.envString("BASE_RPC_URL"), FORK_BLOCK);
@@ -90,19 +101,21 @@ contract TimelockWrapperForeignTest is DssTest {
         SPARK_RATE_LIMITS = ControllerLike(SPARK_CONTROLLER).rateLimits();
         GROVE_RATE_LIMITS = ControllerLike(GROVE_CONTROLLER).rateLimits();
 
+        govRelay    = new GovRelayMock();
         coreCouncil = makeAddr("coreCouncil");
         cBeam       = makeAddr("cBeam");
 
-        PASInstance memory pas = PASDeploy.deploy(address(this), GOV_RELAY, MIN_DELAY);
+        PASInstance memory pas = PASDeploy.deploy(address(this), address(govRelay), MIN_DELAY);
         beamState    = BeamState(pas.beamState);
         configurator = Configurator(pas.configurator);
         timelock     = Timelock(payable(pas.timelock));
-        wrapper      = TimelockWrapperForeign(PASDeploy.deployTimelockWrapperForeign(address(this), GOV_RELAY, pas.timelock, pas.beamState));
+        wrapper      = TimelockWrapperForeign(PASDeploy.deployTimelockWrapperForeign(address(this), address(govRelay), pas.timelock, pas.beamState));
 
-        vm.startPrank(GOV_RELAY);
-        PASInit.init(pas, MIN_DELAY, coreCouncil, new address[](0), new address[](0));
-        PASInit.initTimelockWrapper(pas, address(wrapper), coreCouncil);
-        vm.stopPrank();
+        L2PASSpell spell = new L2PASSpell(pas.beamState, pas.configurator, pas.timelock, address(wrapper));
+        govRelay.relay(
+            address(spell),
+            abi.encodeWithSelector(spell.init.selector, MIN_DELAY, coreCouncil, new address[](0), new address[](0))
+        );
 
         // Grant configurator admin role on Base controllers and rate limiters
         vm.startPrank(SPARK_PROXY);
@@ -185,7 +198,7 @@ contract TimelockWrapperForeignTest is DssTest {
     function testKissDiss() public {
         address usr = makeAddr("usr");
 
-        vm.startPrank(GOV_RELAY);
+        vm.startPrank(address(govRelay));
         assertEq(wrapper.buds(usr), 0);
         vm.expectEmit(true, false, false, true);
         emit Kiss(usr);
