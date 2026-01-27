@@ -32,7 +32,7 @@ contract BeamState {
     mapping(address rateLimits_ => mapping(address cBeam => uint256 allowed))       public rateLimitsCBeams;      // allowed == 0 => false, allowed == 1 => true
     mapping(address controller => mapping(address cBeam => uint256 allowed))        public controllersCBeams;     // allowed == 0 => false, allowed == 1 => true
     mapping(bytes32 key => mapping(address rateLimits_ => DefaultRateLimits limit)) public initRateLimits;        // rateLimits == address(0) every rateLimits allowed
-    mapping(bytes32 key => mapping(address rateLimits_ => bool allowed))            public initControllerActions; // rateLimits == address(0) every rateLimits allowed
+    mapping(bytes32 key => mapping(address controller => bool allowed))            public initControllerActions; // controller == address(0) every controller allowed
     mapping(address rateLimits_ => uint256 value)                                   public hop;                   // rateLimits == address(0) => general backup configuration
     mapping(address rateLimits_ => uint256 value)                                   public maxChange;             // rateLimits == address(0) => general backup configuration
 

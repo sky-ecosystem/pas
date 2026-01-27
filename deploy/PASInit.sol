@@ -118,7 +118,7 @@ library PASInit {
         beamState.setUserRole(address(timelock), uint8(Role.DELAYED),   true);
         beamState.setUserRole(coreCouncil,       uint8(Role.IMMEDIATE), true);
 
-        // --- Configure Timelock and Wrapper ---
+        // --- Configure Timelock ---
 
         // Grant the coreCouncil as the proposer in the timelock directly
         // Grant cancellers and pausers in timelock with their respective roles
