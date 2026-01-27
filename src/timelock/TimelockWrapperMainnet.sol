@@ -81,18 +81,18 @@ struct RateLimitConfig {
 // - The wrapper is assumed to be frequently replaced/improved, depending on downstream contracts changes or other needs.
 // - The actual downstream changes only take effect when cBEAMs use the BeamState configurations, so atomicity in configurations can not be assumed (which is a known issue).
 // - As part of a controller onboarding it might need to be `kiss`ed on the PSM. That is assumed to be orchestrated without the wrapper.
-contract TimelockWrapper {
+contract TimelockWrapperMainnet {
     // --- Auth ---
     mapping(address => uint256) public wards;
     mapping(address => uint256) public buds;
 
     modifier auth() {
-        require(wards[msg.sender] == 1, "TimelockWrapper/not-authorized");
+        require(wards[msg.sender] == 1, "TimelockWrapperMainnet/not-authorized");
         _;
     }
 
     modifier toll() {
-        require(buds[msg.sender] == 1, "TimelockWrapper/not-whitelisted");
+        require(buds[msg.sender] == 1, "TimelockWrapperMainnet/not-whitelisted");
         _;
     }
 
@@ -233,7 +233,7 @@ contract TimelockWrapper {
 
     // --- Controller Actions ---
 
-    // Spark functions
+    // Shared Spark & Grove functions
 
     // Role bytes32 can be computed off-chain and passed as parameter, e.g keccak256("RELAYER"), keccak256("FREEZER")
     function grantRole(
@@ -331,6 +331,29 @@ contract TimelockWrapper {
         emit ProposalSubmitted(operationId, "setMaxSlippage");
     }
     
+    function setMaxExchangeRate(
+        address token,
+        uint256 shares,
+        uint256 maxExpectedAssets,
+        address controller,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            ControllerLike.setMaxExchangeRate.selector,
+            token,
+            shares,
+            maxExpectedAssets
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setMaxExchangeRate");
+    }
+
+    // Spark-only functions
+
     function setOTCBuffer(
         address exchange,
         address otcBuffer,
@@ -388,27 +411,6 @@ contract TimelockWrapper {
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setOTCWhitelistedAsset");
-    }
-    
-    function setMaxExchangeRate(
-        address token,
-        uint256 shares,
-        uint256 maxExpectedAssets,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setMaxExchangeRate.selector,
-            token,
-            shares,
-            maxExpectedAssets
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setMaxExchangeRate");
     }
 
     // Grove-only functions
@@ -508,4 +510,3 @@ contract TimelockWrapper {
         emit ProposalSubmitted(operationId, "setCentrifugeRecipient");
     }
 }
-

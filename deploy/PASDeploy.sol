@@ -21,7 +21,7 @@ import { PASInstance } from "./PASInstance.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
-import { TimelockWrapper } from "src/timelock/TimelockWrapper.sol";
+import { TimelockWrapperMainnet } from "src/timelock/TimelockWrapperMainnet.sol";
 import { TimelockWrapperForeign } from "src/timelock/TimelockWrapperForeign.sol";
 import { PASMom } from "src/PASMom.sol";
 
@@ -53,17 +53,17 @@ library PASDeploy {
         PASMom(mom).setOwner(owner);
     }
 
-    function deployTimelockWrapper(
+    function deployTimelockWrapperMainnet(
         address deployer,
         address owner,
         address timelock,
         address beamState
-    ) internal returns (address timelockWrapper) {
-        timelockWrapper = address(new TimelockWrapper(
+    ) internal returns (address timelockWrapperMainnet) {
+        timelockWrapperMainnet = address(new TimelockWrapperMainnet(
             timelock,
             beamState
         ));
-        ScriptTools.switchOwner(timelockWrapper, deployer, owner);
+        ScriptTools.switchOwner(timelockWrapperMainnet, deployer, owner);
     }
 
     function deployTimelockWrapperForeign(

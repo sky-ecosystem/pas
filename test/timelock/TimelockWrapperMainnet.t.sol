@@ -18,7 +18,7 @@ pragma solidity ^0.8.24;
 
 import "dss-test/DssTest.sol";
 import { MCD, DssInstance } from "dss-test/MCD.sol";
-import { TimelockWrapper, RateLimitConfig } from "src/timelock/TimelockWrapper.sol";
+import { TimelockWrapperMainnet, RateLimitConfig } from "src/timelock/TimelockWrapperMainnet.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
@@ -53,7 +53,7 @@ interface RateLimitsLike {
     function getRateLimitData(bytes32 key) external view returns (uint256, uint256, uint256, uint256);
 }
 
-contract TimelockWrapperTest is DssTest {
+contract TimelockWrapperMainnetTest is DssTest {
     // --- Events ---
     event Kiss(address indexed usr);
     event Diss(address indexed usr);
@@ -80,10 +80,10 @@ contract TimelockWrapperTest is DssTest {
     address GROVE_RATE_LIMITS;
 
     // --- PAS Instance ---
-    BeamState       beamState;
-    Configurator    configurator;
-    Timelock        timelock;
-    TimelockWrapper wrapper;
+    BeamState              beamState;
+    Configurator           configurator;
+    Timelock               timelock;
+    TimelockWrapperMainnet wrapper;
 
     address pauseProxy;
     address coreCouncil;
@@ -108,7 +108,7 @@ contract TimelockWrapperTest is DssTest {
         beamState    = BeamState(pas.beamState);
         configurator = Configurator(pas.configurator);
         timelock     = Timelock(payable(pas.timelock));
-        wrapper      = TimelockWrapper(PASDeploy.deployTimelockWrapper(address(this), pauseProxy, pas.timelock, pas.beamState));
+        wrapper      = TimelockWrapperMainnet(PASDeploy.deployTimelockWrapperMainnet(address(this), pauseProxy, pas.timelock, pas.beamState));
 
         vm.startPrank(pauseProxy);
         PASInit.init(pas, MIN_DELAY, coreCouncil, new address[](0), new address[](0));
@@ -182,7 +182,7 @@ contract TimelockWrapperTest is DssTest {
     function testConstructor() public {
         vm.expectEmit(true, false, false, true);
         emit Rely(address(this));
-        TimelockWrapper newWrapper = new TimelockWrapper(address(timelock), address(beamState));
+        TimelockWrapperMainnet newWrapper = new TimelockWrapperMainnet(address(timelock), address(beamState));
 
         assertEq(address(newWrapper.timelock()), address(timelock), "Timelock set correctly");
         assertEq(address(newWrapper.beamState()), address(beamState), "BeamState set correctly");
@@ -190,7 +190,7 @@ contract TimelockWrapperTest is DssTest {
     }
 
     function testAuth() public {
-        checkAuth(address(wrapper), "TimelockWrapper");
+        checkAuth(address(wrapper), "TimelockWrapperMainnet");
     }
 
     function testKissDiss() public {
@@ -215,7 +215,7 @@ contract TimelockWrapperTest is DssTest {
         authedMethods[1] = wrapper.diss.selector;
 
         vm.startPrank(address(0xBEEF));
-        checkModifier(address(wrapper), "TimelockWrapper/not-authorized", authedMethods);
+        checkModifier(address(wrapper), "TimelockWrapperMainnet/not-authorized", authedMethods);
         vm.stopPrank();
     }
 
@@ -245,7 +245,7 @@ contract TimelockWrapperTest is DssTest {
         tolledMethods[21] = wrapper.setCentrifugeRecipient.selector;
 
         vm.startPrank(address(0xBEEF));
-        checkModifier(address(wrapper), "TimelockWrapper/not-whitelisted", tolledMethods);
+        checkModifier(address(wrapper), "TimelockWrapperMainnet/not-whitelisted", tolledMethods);
         vm.stopPrank();
     }
 
