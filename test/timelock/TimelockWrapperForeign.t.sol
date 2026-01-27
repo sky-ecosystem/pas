@@ -75,7 +75,6 @@ contract TimelockWrapperForeignTest is DssTest {
     address constant GROVE_CONTROLLER = 0x7f8408eBbBC3504F83eeDa52910dd75Eba92C955;
     address constant GROVE_PROXY      = 0x491EDFB0B8b608044e227225C715981a30F3A44E;
 
-    uint256 constant FORK_BLOCK = 41300000;
     uint256 constant MIN_DELAY  = 1 days;
 
     bytes32 constant OZ_DEFAULT_ADMIN_ROLE = bytes32(0);
@@ -95,7 +94,7 @@ contract TimelockWrapperForeignTest is DssTest {
     address      cBeam;
 
     function setUp() public {
-        vm.createSelectFork(vm.envString("BASE_RPC_URL"), FORK_BLOCK);
+        vm.createSelectFork(vm.envString("BASE_RPC_URL"));
 
         // Fetch rate limits from controllers
         SPARK_RATE_LIMITS = ControllerLike(SPARK_CONTROLLER).rateLimits();
