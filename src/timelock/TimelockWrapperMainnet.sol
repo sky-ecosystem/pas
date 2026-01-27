@@ -81,18 +81,18 @@ struct RateLimitConfig {
 // - The wrapper is assumed to be frequently replaced/improved, depending on downstream contracts changes or other needs.
 // - The actual downstream changes only take effect when cBEAMs use the BeamState configurations, so atomicity in configurations can not be assumed (which is a known issue).
 // - As part of a controller onboarding it might need to be `kiss`ed on the PSM. That is assumed to be orchestrated without the wrapper.
-contract TimelockWrapper {
+contract TimelockWrapperMainnet {
     // --- Auth ---
     mapping(address => uint256) public wards;
     mapping(address => uint256) public buds;
 
     modifier auth() {
-        require(wards[msg.sender] == 1, "TimelockWrapper/not-authorized");
+        require(wards[msg.sender] == 1, "TimelockWrapperMainnet/not-authorized");
         _;
     }
 
     modifier toll() {
-        require(buds[msg.sender] == 1, "TimelockWrapper/not-whitelisted");
+        require(buds[msg.sender] == 1, "TimelockWrapperMainnet/not-whitelisted");
         _;
     }
 

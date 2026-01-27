@@ -16,7 +16,7 @@ The operational interface used by cBeams to modify rate limits and execute contr
 
 Extended OpenZeppelin TimelockController with pausing support, permissionless execution, and operation tracking for keeper integration. Disables self-calls to prevent proposals from modifying admin settings. Provides helper functions (`getNextExecutableOperation`, `getOperationIndex`) for automated execution via keeper jobs.
 
-### TimelockWrapper
+### TimelockWrapperMainnet
 
 Convenience contract for proposers to schedule batched BeamState configuration changes through the timelock. Provides type-safe wrappers for common operations like adding rate limits, controllers, cBeams, and their initial configurations. Authorized users (`buds`) can schedule proposals that execute after the timelock delay.
 
