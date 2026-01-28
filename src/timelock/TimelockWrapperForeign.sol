@@ -76,7 +76,7 @@ struct RateLimitConfig {
 // Notes:
 // - This wrapper is assumed as a helper only, and can be bypassed by submitting payloads directly to the Timelock (for an authorised proposer).
 // - The wrapper is assumed to be frequently replaced/improved, depending on downstream contracts changes or other needs.
-// - The actual downstream changes only take effect when cBEAMs use the BEAMState configurations, so atomicity in configurations can not be assumed (which is a known issue).
+// - The actual downstream changes only take effect when cBEAMs use the BeamState configurations, so atomicity in configurations can not be assumed (which is a known issue).
 // - As part of a controller onboarding it might need to be `kiss`ed on the PSM. That is assumed to be orchestrated without the wrapper.
 contract TimelockWrapperForeign {
     // --- Auth ---
@@ -230,7 +230,7 @@ contract TimelockWrapperForeign {
 
     // --- Controller Actions ---
 
-    // Spark functions
+    // Spark and Grove functions
 
     // Role bytes32 can be computed off-chain and passed as parameter, e.g keccak256("RELAYER"), keccak256("FREEZER")
     function grantRole(

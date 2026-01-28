@@ -19,7 +19,7 @@ pragma solidity >=0.8.0;
 import { PASInit } from "./PASInit.sol";
 import { PASInstance } from "./PASInstance.sol";
 
-// A reusable L2 spell for L2GovernanceRelay to initialize PAS contracts on a foreign chain.
+// An L2 spell template for L2GovernanceRelay to initialize PAS contracts on a foreign chain.
 // This spell should be viewed as skeleton/sample and can be altered prior to being used
 // if further configurations are needed (for example adding more proposers).
 contract L2PASSpell {
