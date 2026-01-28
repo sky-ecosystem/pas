@@ -54,16 +54,13 @@ interface ControllerLike {
     function setLayerZeroRecipient(uint32 destinationEndpointId, bytes32 layerZeroRecipient) external;
     function setMaxSlippage(address pool, uint256 maxSlippage) external;
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
-    // Spark-only functions (v1.8.0)
-    function setOTCBuffer(address exchange, address otcBuffer) external;
-    function setOTCRechargeRate(address exchange, uint256 rechargeRate18) external;
-    function setOTCWhitelistedAsset(address exchange, address asset, bool isWhitelisted) external;
     // Grove-only functions (v1.8.0)
     function setUniswapV3PoolMaxTickDelta(address pool, uint24 maxTickDelta) external;
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external;
     function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external;
     function setUniswapV3TwapSecondsAgo(address pool, uint32 twapSecondsAgo) external;
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external;
+    function setMerklDistributor(address merklDistributor) external;
 }
 
 struct RateLimitConfig {
@@ -73,26 +70,26 @@ struct RateLimitConfig {
     uint256 slope;
 }
 
-// Spark Mainnet controller aligned to v1.8.0: https://github.com/sparkdotfi/spark-alm-controller/blob/7be959378fe48117f7a06796f94e240345428982/src/MainnetController.sol
-// Grove Mainnet controller aligned to v1.8.0: https://github.com/grove-labs/grove-alm-controller/blob/2c6e3d4297d5f244894d05f3dbbe47bcada34712/src/MainnetController.sol
+// Spark Foreign controller aligned to v1.8.0: https://github.com/sparkdotfi/spark-alm-controller/blob/7be959378fe48117f7a06796f94e240345428982/src/ForeignController.sol
+// Grove Foreign controller aligned to v1.8.0: https://github.com/grove-labs/grove-alm-controller/blob/2c6e3d4297d5f244894d05f3dbbe47bcada34712/src/ForeignController.sol
 
 // Notes:
 // - This wrapper is assumed as a helper only, and can be bypassed by submitting payloads directly to the Timelock (for an authorised proposer).
 // - The wrapper is assumed to be frequently replaced/improved, depending on downstream contracts changes or other needs.
 // - The actual downstream changes only take effect when cBEAMs use the BeamState configurations, so atomicity in configurations can not be assumed (which is a known issue).
 // - As part of a controller onboarding it might need to be `kiss`ed on the PSM. That is assumed to be orchestrated without the wrapper.
-contract TimelockWrapperMainnet {
+contract TimelockWrapperForeign {
     // --- Auth ---
     mapping(address => uint256) public wards;
     mapping(address => uint256) public buds;
 
     modifier auth() {
-        require(wards[msg.sender] == 1, "TimelockWrapperMainnet/not-authorized");
+        require(wards[msg.sender] == 1, "TimelockWrapperForeign/not-authorized");
         _;
     }
 
     modifier toll() {
-        require(buds[msg.sender] == 1, "TimelockWrapperMainnet/not-whitelisted");
+        require(buds[msg.sender] == 1, "TimelockWrapperForeign/not-whitelisted");
         _;
     }
 
@@ -352,67 +349,6 @@ contract TimelockWrapperMainnet {
         emit ProposalSubmitted(operationId, "setMaxExchangeRate");
     }
 
-    // Spark-only functions
-
-    function setOTCBuffer(
-        address exchange,
-        address otcBuffer,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setOTCBuffer.selector,
-            exchange,
-            otcBuffer
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setOTCBuffer");
-    }
-    
-    function setOTCRechargeRate(
-        address exchange,
-        uint256 rechargeRate18,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setOTCRechargeRate.selector,
-            exchange,
-            rechargeRate18
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setOTCRechargeRate");
-    }
-    
-    function setOTCWhitelistedAsset(
-        address exchange,
-        address asset,
-        bool isWhitelisted,
-        address controller,
-        bytes32 predecessor,
-        bytes32 salt,
-        uint256 delay
-    ) external toll returns (bytes32 operationId) {
-        bytes memory controllerData = abi.encodeWithSelector(
-            ControllerLike.setOTCWhitelistedAsset.selector,
-            exchange,
-            asset,
-            isWhitelisted
-        );
-        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
-
-        operationId = _submitProposal(payload, predecessor, salt, delay);
-        emit ProposalSubmitted(operationId, "setOTCWhitelistedAsset");
-    }
-
     // Grove-only functions
 
     function setUniswapV3PoolMaxTickDelta(
@@ -508,5 +444,22 @@ contract TimelockWrapperMainnet {
 
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setCentrifugeRecipient");
+    }
+
+    function setMerklDistributor(
+        address merklDistributor,
+        address controller,
+        bytes32 predecessor,
+        bytes32 salt,
+        uint256 delay
+    ) external toll returns (bytes32 operationId) {
+        bytes memory controllerData = abi.encodeWithSelector(
+            ControllerLike.setMerklDistributor.selector,
+            merklDistributor
+        );
+        bytes memory payload = abi.encodeWithSelector(BeamStateLike.addInitControllerActions.selector, controllerData, controller);
+
+        operationId = _submitProposal(payload, predecessor, salt, delay);
+        emit ProposalSubmitted(operationId, "setMerklDistributor");
     }
 }
