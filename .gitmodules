@@ -8,3 +8,15 @@
 	path = lib/dss-test
 	url = https://github.com/sky-ecosystem/dss-test
 
+[submodule "lib/dss-allocator"]
+	path = lib/dss-allocator
+	url = https://github.com/sky-ecosystem/dss-allocator
+	branch = dev
+[submodule "lib/spark-alm-controller"]
+	path = lib/spark-alm-controller
+	url = https://github.com/sparkdotfi/spark-alm-controller
+	branch = dev
+[submodule "lib/spark-vaults-v2"]
+	path = lib/spark-vaults-v2
+	url = https://github.com/sparkdotfi/spark-vaults-v2
+	branch = dev

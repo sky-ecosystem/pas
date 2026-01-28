@@ -2,10 +2,42 @@
 src = "src"
 out = "out"
 libs = ["lib"]
-solc = "0.8.24"
+auto_detect_solc = true
 optimizer = true
 optimizer_runs = 200
-evmVersion = "cancun"
+evm_version = "cancun"
 verbosity = 1
+deny = "never"
+
+remappings = [
+    "dss-test/=lib/dss-test/src/",
+    "forge-std/=lib/forge-std/src/",
+    "openzeppelin-contracts/=lib/spark-vaults-v2/lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/",
+    "openzeppelin-contracts-upgradeable/=lib/spark-vaults-v2/lib/openzeppelin-contracts-upgradeable/",
+    "@openzeppelin/contracts/=lib/spark-vaults-v2/lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/contracts-upgradeable/=lib/spark-vaults-v2/lib/openzeppelin-contracts-upgradeable/contracts/",
+    "dss-allocator/=lib/dss-allocator/",
+    "spark-alm-controller/=lib/spark-alm-controller/",
+    "spark-vaults-v2/=lib/spark-vaults-v2/",
+    "aave-v3-origin/=lib/spark-alm-controller/lib/aave-v3-origin/",
+    "@layerzerolabs/oft-evm/=lib/spark-alm-controller/lib/devtools/packages/oft-evm/",
+    "layerzerolabs/oapp-evm/=lib/spark-alm-controller/lib/devtools/packages/oapp-evm/",
+    "@layerzerolabs/lz-evm-protocol-v2/=lib/spark-alm-controller/lib/layerzero-v2/packages/layerzero-v2/evm/protocol",
+    "@layerzerolabs/lz-evm-messagelib-v2/=lib/spark-alm-controller/lib/layerzero-v2/packages/layerzero-v2/evm/messagelib/",
+    "solidity-bytes-utils/=lib/spark-alm-controller/lib/solidity-bytes-utils/",
+    "@uniswap/v4-core/=lib/spark-alm-controller/lib/uniswap-v4-core/",
+    "@uniswap/v4-periphery/=lib/spark-alm-controller/lib/uniswap-v4-periphery/",
+    "spark-psm/=lib/spark-alm-controller/lib/spark-psm/",
+    "usds/=lib/spark-alm-controller/lib/usds/",
+    "sdai/=lib/spark-alm-controller/lib/sdai/",
+    "xchain-helpers/=lib/spark-alm-controller/lib/xchain-helpers/",
+    "erc20-helpers/=lib/spark-alm-controller/lib/erc20-helpers/src/",
+    "metamorpho/=lib/spark-alm-controller/lib/metamorpho/src/",
+    "spark-address-registry/=lib/spark-alm-controller/lib/spark-address-registry/src/",
+]
+
+[lint]
+severity = []
+lint_on_build = false
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
