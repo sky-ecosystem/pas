@@ -84,22 +84,6 @@ contract IntegrationTest is DssTest {
     uint256 constant MIN_DELAY = 1 days;
     bytes32 constant SALT = keccak256("integration-test");
 
-    // Events
-    event CallScheduled(
-        bytes32 indexed id,
-        uint256 indexed index,
-        address target,
-        uint256 value,
-        bytes data,
-        bytes32 predecessor,
-        uint256 delay
-    );
-    event CallExecuted(bytes32 indexed id, uint256 indexed index, address target, uint256 value, bytes data);
-    event Cancelled(bytes32 indexed id);
-    event Paused(address account);
-    event Unpaused(address account);
-    event ProposalSubmitted(bytes32 indexed operationId, string functionName);
-
     function setUp() public {
         // Fork mainnet at specified block
         vm.createSelectFork(vm.envString("ETH_RPC_URL"));
