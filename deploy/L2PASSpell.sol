@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-pragma solidity >=0.8.0;
+pragma solidity ^0.8.24;
 
 import { PASInit } from "./PASInit.sol";
 import { PASInstance } from "./PASInstance.sol";
