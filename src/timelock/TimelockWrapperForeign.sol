@@ -230,7 +230,7 @@ contract TimelockWrapperForeign {
 
     // --- Controller Actions ---
 
-    // Spark and Grove functions
+    // Shared Spark & Grove functions
 
     // Role bytes32 can be computed off-chain and passed as parameter, e.g keccak256("RELAYER"), keccak256("FREEZER")
     function grantRole(

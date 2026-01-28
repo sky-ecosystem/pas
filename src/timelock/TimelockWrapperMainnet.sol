@@ -115,7 +115,7 @@ contract TimelockWrapperMainnet {
         buds[usr] = 0;
         emit Diss(usr);
     }
-    
+
     // --- Events ---
     event Rely(address indexed usr);
     event Deny(address indexed usr);
@@ -125,15 +125,15 @@ contract TimelockWrapperMainnet {
 
     TimelockLike  public immutable timelock;
     BeamStateLike public immutable beamState;
-    
+
     constructor(address timelock_, address beamState_) {
         timelock  = TimelockLike(payable(timelock_));
         beamState = BeamStateLike(beamState_);
-        
+
         wards[msg.sender] = 1;
         emit Rely(msg.sender);
     }
-    
+
     function _submitProposal(bytes memory payload, bytes32 predecessor, bytes32 salt, uint256 delay) internal returns (bytes32 operationId) {
         address[] memory targets = new address[](1);
         targets[0] = address(beamState);
@@ -292,7 +292,7 @@ contract TimelockWrapperMainnet {
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMintRecipient");
     }
-    
+
     function setLayerZeroRecipient(
         uint32 destinationEndpointId,
         bytes32 layerZeroRecipient,
@@ -311,7 +311,7 @@ contract TimelockWrapperMainnet {
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setLayerZeroRecipient");
     }
-    
+
     function setMaxSlippage(
         address pool,
         uint256 maxSlippage,
@@ -330,7 +330,7 @@ contract TimelockWrapperMainnet {
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setMaxSlippage");
     }
-    
+
     function setMaxExchangeRate(
         address token,
         uint256 shares,
@@ -452,7 +452,7 @@ contract TimelockWrapperMainnet {
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setUniswapV3AddLiquidityLowerTickBound");
     }
-    
+
     function setUniswapV3AddLiquidityUpperTickBound(
         address pool,
         int24 upperTickBound,
@@ -471,7 +471,7 @@ contract TimelockWrapperMainnet {
         operationId = _submitProposal(payload, predecessor, salt, delay);
         emit ProposalSubmitted(operationId, "setUniswapV3AddLiquidityUpperTickBound");
     }
-    
+
     function setUniswapV3TwapSecondsAgo(
         address pool,
         uint32 twapSecondsAgo,
