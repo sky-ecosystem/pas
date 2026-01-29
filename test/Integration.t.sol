@@ -213,6 +213,49 @@ contract IntegrationTest is DssTest {
         assertEq(beamState.wards(address(mom)), 1, "mom should have wards on beamState");
     }
 
+    function testInitExtras() public {
+        // Deploy a fresh PAS instance for this test
+        PASInstance memory freshPas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
+        BeamState freshBeamState = BeamState(freshPas.beamState);
+
+        // Setup test data
+        uint256 hop = 2 hours;
+        uint256 maxChange = 1.5 ether; // 150% in WAD
+
+        address[] memory testCBeams = new address[](2);
+        testCBeams[0] = address(0x10);
+        testCBeams[1] = address(0x11);
+
+        address[] memory testRateLimits = new address[](2);
+        testRateLimits[0] = SPARK_RATE_LIMITS;
+        testRateLimits[1] = address(0x21);
+
+        address[] memory testControllers = new address[](2);
+        testControllers[0] = SPARK_CONTROLLER;
+        testControllers[1] = address(0x22);
+
+        // Deploy helper and give it auth on beamState
+        vm.startPrank(pauseProxy);
+        PASInit.initExtras(freshPas, hop, maxChange, testCBeams, testRateLimits, testControllers);
+        vm.stopPrank();
+
+        // Verify default hop and maxChange are set
+        assertEq(freshBeamState.getHop(address(0)), hop, "default hop should be set");
+        assertEq(freshBeamState.getMaxChange(address(0)), maxChange, "default maxChange should be set");
+
+        // Verify cBeams are added
+        assertEq(freshBeamState.cBeams(testCBeams[0]), 1, "first cBeam should be added");
+        assertEq(freshBeamState.cBeams(testCBeams[1]), 1, "second cBeam should be added");
+
+        // Verify rateLimits are added
+        assertEq(freshBeamState.rateLimits(testRateLimits[0]), 1, "first rateLimits should be added");
+        assertEq(freshBeamState.rateLimits(testRateLimits[1]), 1, "second rateLimits should be added");
+
+        // Verify controllers are added
+        assertEq(freshBeamState.controllers(testControllers[0]), 1, "first controller should be added");
+        assertEq(freshBeamState.controllers(testControllers[1]), 1, "second controller should be added");
+    }
+
     // ============================================================================
     // CoreCouncil Direct Actions (IMMEDIATE Role) Tests
     // ============================================================================

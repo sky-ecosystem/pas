@@ -132,6 +132,29 @@ library PASInit {
         }
     }
 
+    function initExtras(
+        PASInstance memory pasInstance,
+        uint256 hop,
+        uint256 maxChange,
+        address[] memory cBeams,
+        address[] memory rateLimits,
+        address[] memory controllers
+    ) internal {
+        BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
+
+        beamState.setHop(address(0), hop);
+        beamState.setMaxChange(address(0), maxChange);
+        for(uint256 i; i < cBeams.length; i++) {
+            beamState.addCBeam(cBeams[i]);
+        }
+        for(uint256 i; i < rateLimits.length; i++) {
+            beamState.addRateLimits(rateLimits[i]);
+        }
+        for(uint256 i; i < controllers.length; i++) {
+            beamState.addController(controllers[i]);
+        }
+    }
+
     function addCoreToChainlog(
         DssInstance memory dss,
         PASInstance memory pasInstance,
