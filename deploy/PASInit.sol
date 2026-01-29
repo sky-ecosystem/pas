@@ -134,17 +134,21 @@ library PASInit {
 
     function addCoreToChainlog(
         DssInstance memory dss,
-        PASInstance memory pasInstance
+        PASInstance memory pasInstance,
+        bytes32 stateKey,
+        bytes32 configuratorKey,
+        bytes32 timelockKey
     ) internal {
-        dss.chainlog.setAddress("PAS_STATE",        pasInstance.beamState);
-        dss.chainlog.setAddress("PAS_CONFIGURATOR", pasInstance.configurator);
-        dss.chainlog.setAddress("PAS_TIMELOCK",     pasInstance.timelock);
+        dss.chainlog.setAddress(stateKey,        pasInstance.beamState);
+        dss.chainlog.setAddress(configuratorKey, pasInstance.configurator);
+        dss.chainlog.setAddress(timelockKey,     pasInstance.timelock);
     }
 
     function initMom(
         DssInstance memory dss,
         PASInstance memory pasInstance,
-        address mom_
+        address mom_,
+        bytes32 key
     ) internal {
         BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
         TimelockLike  timelock  = TimelockLike(pasInstance.timelock);
@@ -166,7 +170,7 @@ library PASInit {
 
         // --- Chainlog ---
 
-        dss.chainlog.setAddress("PAS_MOM", address(mom));
+        dss.chainlog.setAddress(key, address(mom));
     }
 
     function initTimelockWrapper(

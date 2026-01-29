@@ -122,8 +122,8 @@ contract IntegrationTest is DssTest {
 
         vm.startPrank(pauseProxy);
         PASInit.init(pas, MIN_DELAY, coreCouncil, cancellers, pausers);
-        PASInit.addCoreToChainlog(dss, pas);
-        PASInit.initMom(dss, pas, address(mom));
+        PASInit.addCoreToChainlog(dss, pas, "PAS_STATE", "PAS_CONFIGURATOR", "PAS_TIMELOCK");
+        PASInit.initMom(dss, pas, address(mom), "PAS_MOM");
         PASInit.initTimelockWrapper(pas, address(wrapper), coreCouncil);
         vm.stopPrank();
     }
