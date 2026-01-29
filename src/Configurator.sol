@@ -113,6 +113,8 @@ contract Configurator {
                 require(block.timestamp >= zzz[rateLimits][key] + beamState.getHop(rateLimits), "Configurator/increment-too-soon");
                 zzz[rateLimits][key] = block.timestamp;
             }
+
+            // Note that the initial capacity for a new key will be 0 (which might differ from previous usages)
             uint256 lastAmount = RateLimitsLike(rateLimits).getCurrentRateLimit(key);
             RateLimitsLike(rateLimits).setRateLimitData(key, maxAmount, slope, _min(maxAmount, lastAmount), block.timestamp);
             emit SetRateLimit(rateLimits, key, maxAmount, slope);
