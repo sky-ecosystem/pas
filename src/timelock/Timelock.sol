@@ -34,15 +34,15 @@ contract Timelock is TimelockController, Pausable {
         bytes32 salt;
     }
 
-    EnumerableSet.Bytes32Set private _operationIds;
-    mapping(bytes32 id => Operation) public operations; // Public for keeper access
+    EnumerableSet.Bytes32Set         internal _operationIds;
+    mapping(bytes32 id => Operation) internal _operations;
 
     // Changes from original timelock:
     // - Do not allow proposers to change admin-only configurations
     // - Make execution permissionless
     // - Add pausing logic
-    // - Allow admin to change the delay immediately
-    // - Do not allow proposals to change the delay
+    // - Allow admin to change the min delay immediately
+    // - Do not allow proposals to change the min delay
 
     // Notes:
     // - By default all proposers can also cancel any proposal, this should be taken into account to make sure that they are trusted and that specific cancellations do not cause big harm.
@@ -104,7 +104,7 @@ contract Timelock is TimelockController, Pausable {
         // Track operation for keeper jobs
         bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
         _operationIds.add(id);
-        operations[id] = Operation(targets, values, payloads, predecessor, salt);
+        _operations[id] = Operation(targets, values, payloads, predecessor, salt);
     }
 
     // As unpausing requires an admin action anyway, it is fine to block canceling while paused.
@@ -112,7 +112,7 @@ contract Timelock is TimelockController, Pausable {
     function cancel(bytes32 id) public virtual override whenNotPaused {
         super.cancel(id);
         _operationIds.remove(id);
-        delete operations[id];
+        delete _operations[id];
     }
 
     // ------------------------------------------------------------------------
@@ -133,7 +133,7 @@ contract Timelock is TimelockController, Pausable {
         super.executeBatch(targets, values, payloads, predecessor, salt);
         bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
         _operationIds.remove(id);
-        delete operations[id];
+        delete _operations[id];
     }
 
     // ------------------------------------------------------------------------
@@ -158,7 +158,7 @@ contract Timelock is TimelockController, Pausable {
             if (!isOperationReady(operationId)) continue;
 
             // Check if predecessor is done, if any
-            bytes32 predecessor = operations[operationId].predecessor;
+            bytes32 predecessor = _operations[operationId].predecessor;
             if (predecessor != bytes32(0) && !isOperationDone(predecessor)) continue;
 
             return operationId;
@@ -180,7 +180,7 @@ contract Timelock is TimelockController, Pausable {
     }
 
     function getOperation(bytes32 id) external view returns (Operation memory op) {
-        return operations[id];
+        return _operations[id];
     }
 }
 
