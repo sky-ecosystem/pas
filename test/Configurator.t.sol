@@ -790,6 +790,25 @@ contract ConfiguratorTest is DssTest {
         assertEq(data.slope, 0, "slope can be set to 0");
     }
 
+    function testRevertHopNotSet() public {
+        bytes32 key = keccak256("hop-not-set-key");
+        _setupCBeam(address(target1), CBEAM1);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
+        _setupRateLimitData(target1, key, 500 * WAD, 5 * WAD, 500 * WAD, block.timestamp);
+
+        // Clear global hop to simulate hop-not-set scenario
+        beamState.setHop(address(0), 0);
+        // Ensure no specific hop for target1
+        beamState.setHop(address(target1), 0);
+
+        vm.warp(block.timestamp + 86_400); // Warp time (doesn't matter since hop is 0)
+
+        // Try to increase rate limits - should revert
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/hop-not-set");
+        configurator.setRateLimit(address(target1), key, 600 * WAD, 6 * WAD);
+    }
+
     function testDifferentKeysIndependentZzz() public {
         bytes32 key1 = keccak256("key-1");
         bytes32 key2 = keccak256("key-2");

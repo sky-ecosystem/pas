@@ -153,6 +153,15 @@ contract TimelockWrapperMainnetTest is DssTest {
         beamState.setCBeamForRateLimits(SPARK_RATE_LIMITS, cBeam);
         beamState.setCBeamForRateLimits(GROVE_RATE_LIMITS, cBeam);
         vm.stopPrank();
+
+        // Set hop for rate limiters (required for setRateLimit to work on increases)
+        vm.startPrank(coreCouncil);
+        bytes32 hopId;
+        hopId = wrapper.setHop(SPARK_RATE_LIMITS, 1 hours, bytes32(0), keccak256("spark-hop"), MIN_DELAY);
+        _execute(hopId);
+        hopId = wrapper.setHop(GROVE_RATE_LIMITS, 1 hours, bytes32(0), keccak256("grove-hop"), MIN_DELAY);
+        _execute(hopId);
+        vm.stopPrank();
     }
 
     // ============================================================================

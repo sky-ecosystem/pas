@@ -110,7 +110,9 @@ contract Configurator {
 
             // Any increase requires hop
             if (maxAmount > current.maxAmount || slope > current.slope) {
-                require(block.timestamp >= zzz[rateLimits][key] + beamState.getHop(rateLimits), "Configurator/increment-too-soon");
+                uint256 hop = beamState.getHop(rateLimits);
+                require(hop > 0, "Configurator/hop-not-set");
+                require(block.timestamp >= zzz[rateLimits][key] + hop, "Configurator/increment-too-soon");
                 zzz[rateLimits][key] = block.timestamp;
             }
 

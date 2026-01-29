@@ -780,6 +780,7 @@ contract IntegrationTest is DssTest {
         beamState.addCBeam(cBeam);
         beamState.addRateLimits(SPARK_RATE_LIMITS);
         beamState.addInitRateLimits(rateLimitKey, SPARK_RATE_LIMITS, 1_000_000e18, 100_000e18);
+        beamState.setHop(SPARK_RATE_LIMITS, 1 hours); // Set hop for rate limit increases
         vm.stopPrank();
 
         vm.prank(coreCouncil);
