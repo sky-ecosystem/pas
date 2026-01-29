@@ -107,6 +107,8 @@ contract Timelock is TimelockController, Pausable {
         operations[id] = Operation(targets, values, payloads, predecessor, salt);
     }
 
+    // As unpausing requires an admin action anyway, it is fine to block canceling while paused.
+    // If needed, the admin can atomically cancel any proposal right after unpausing.
     function cancel(bytes32 id) public virtual override whenNotPaused {
         super.cancel(id);
         _operationIds.remove(id);
