@@ -143,6 +143,8 @@ contract Timelock is TimelockController, Pausable {
     // Operations may still not be executable due to various downstream conditions.
     // It is assumed that this is not a perfect fetching mechanism and that if needed proposals
     // can be executed without cron keepers, or canceled in case they are jamming this mechanism.
+    // Also note that EnumerableSet doesn't maintain insertion order (when an operation is removed
+    // the last element fills its spot). Proposers and keepers are assumed to be aware.
     function getNextExecutableOperation(uint256 startIndex, uint256 maxIterations) external view returns (bytes32 id) {
         uint256 length = _operationIds.length();
         if (startIndex >= length) return bytes32(0);
