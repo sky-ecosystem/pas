@@ -70,6 +70,8 @@ interface PASMomLike {
 library PASInit {
     uint256 constant internal WAD = 10**18;
 
+    // It is noted that delayed and immediate operations order is non deterministic.
+    // The relevant operators of each role are assumed to communicate and track timelock and configurator executions.
     enum Role {
         _UNSET,   // 0 (unused)
         DELAYED,  // 1
