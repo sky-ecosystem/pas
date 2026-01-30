@@ -234,7 +234,6 @@ contract IntegrationTest is DssTest {
         testControllers[0] = SPARK_CONTROLLER;
         testControllers[1] = address(0x22);
 
-        // Deploy helper and give it auth on beamState
         vm.startPrank(pauseProxy);
         PASInit.initExtras(freshPas, hop, maxChange, testCBeams, testRateLimits, testControllers);
         vm.stopPrank();
