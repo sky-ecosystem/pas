@@ -14,7 +14,7 @@ The operational interface used by cBeams to modify rate limits and execute contr
 
 ### Timelock
 
-Extended OpenZeppelin TimelockController with pausing support, permissionless execution, and operation tracking for keeper integration. Disables self-calls to prevent proposals from modifying admin settings. Provides helper functions (`getNextExecutableOperation`, `getOperationIndex`) for automated execution via keeper jobs.
+Extended OpenZeppelin TimelockController with pausing support, permissionless execution, and operation tracking for keeper integration. Disables self-calls to prevent proposals from modifying admin settings. Provides helper functions (as `getNextExecutableOperationId`) for automated execution via keeper jobs.
 
 ### TimelockWrapperMainnet
 

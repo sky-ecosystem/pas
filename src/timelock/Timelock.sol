@@ -18,10 +18,10 @@ pragma solidity ^0.8.24;
 
 import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
-import { EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import { Bytes32LinkedList } from "./Bytes32LinkedList.sol";
 
 contract Timelock is TimelockController, Pausable {
-    using EnumerableSet for EnumerableSet.Bytes32Set;
+    using Bytes32LinkedList for Bytes32LinkedList.List;
 
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
@@ -34,7 +34,7 @@ contract Timelock is TimelockController, Pausable {
         bytes32 salt;
     }
 
-    EnumerableSet.Bytes32Set         internal _operationIds;
+    Bytes32LinkedList.List           internal _operationIds;
     mapping(bytes32 id => Operation) internal _operations;
 
     // Changes from original timelock:
@@ -140,45 +140,56 @@ contract Timelock is TimelockController, Pausable {
     // Keeper job helpers
     // ------------------------------------------------------------------------
 
+    function getOperationCount() external view returns (uint256) {
+        return _operationIds.count;
+    }
+
+    function getOperationExists(bytes32 id) external view returns (bool) {
+        return _operationIds.exists[id];
+    }
+
+    function getPrevOperationId(bytes32 id) external view returns (bytes32) {
+        return _operationIds.nodes[id].prev;
+    }
+
+    function getNextOperationId(bytes32 id) external view returns (bytes32) {
+        return _operationIds.nodes[id].next;
+    }
+
+    function getFirstOperationId() external view returns (bytes32) {
+        return _operationIds.first;
+    }
+
+    function getLastOperationId() external view returns (bytes32) {
+        return _operationIds.last;
+    }
+
     // Operations may still not be executable due to various downstream conditions.
     // It is assumed that this is not a perfect fetching mechanism and that if needed proposals
     // can be executed without cron keepers, or canceled in case they are jamming this mechanism.
-    // Also note that EnumerableSet doesn't maintain insertion order (when an operation is removed
-    // the last element fills its spot). Proposers and keepers are assumed to be aware.
-    function getNextExecutableOperation(uint256 startIndex, uint256 maxIterations) external view returns (bytes32 id) {
-        uint256 length = _operationIds.length();
-        if (startIndex >= length) return bytes32(0);
+    /// @notice Find the next executable operation in the queue
+    /// @param startAfterId Start searching after this operation ID. Use bytes32(0) to start from the beginning.
+    /// @param maxIterations Maximum number of operations to check. Use 0 for no limit.
+    /// @return id The ID of the next executable operation, or bytes32(0) if none found
+    function getNextExecutableOperationId(bytes32 startAfterId, uint256 maxIterations) external view returns (bytes32 id) {
+        bytes32 operationId = startAfterId == bytes32(0) ? _operationIds.first : _operationIds.nodes[startAfterId].next;
 
-        // Safe: if maxIterations is 0 (no limit) or exceeds remaining operations, scan to end
-        uint256 remaining = length - startIndex;
-        uint256 endIndex = (maxIterations == 0 || maxIterations >= remaining) ? length : startIndex + maxIterations;
-
-        for (uint256 i = startIndex; i < endIndex; ++i) {
-            bytes32 operationId = _operationIds.at(i);
-
+        uint256 iterations;
+        while (operationId != bytes32(0) && (maxIterations == 0 || iterations < maxIterations)) {
             // Check if operation is ready
-            if (!isOperationReady(operationId)) continue;
+            if (isOperationReady(operationId)) {
+                // Check if predecessor is done, if any
+                bytes32 predecessor = _operations[operationId].predecessor;
+                if (predecessor == bytes32(0) || isOperationDone(predecessor)) {
+                    return operationId;
+                }
+            }
 
-            // Check if predecessor is done, if any
-            bytes32 predecessor = _operations[operationId].predecessor;
-            if (predecessor != bytes32(0) && !isOperationDone(predecessor)) continue;
-
-            return operationId;
+            operationId = _operationIds.nodes[operationId].next;
+            iterations++;
         }
 
         return bytes32(0);
-    }
-
-    function getOperationIndex(bytes32 id) external view returns (bool exists, uint256 index) {
-        uint256 position = _operationIds._inner._positions[id];
-        if (position == 0) {
-            return (false, 0);
-        }
-        return (true, position - 1);
-    }
-
-    function getOperationCount() external view returns (uint256) {
-        return _operationIds.length();
     }
 
     function getOperation(bytes32 id) external view returns (Operation memory op) {
