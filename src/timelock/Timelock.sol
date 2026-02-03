@@ -189,8 +189,6 @@ contract Timelock is TimelockController, Pausable {
             operationId = _operationIds.nodes[operationId].next;
             iterations++;
         }
-
-        return bytes32(0);
     }
 
     function getOperation(bytes32 id) external view returns (Operation memory op) {
