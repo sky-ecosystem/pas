@@ -169,13 +169,14 @@ contract Timelock is TimelockController, Pausable {
     // can be executed without cron keepers, or canceled in case they are jamming this mechanism.
     /// @notice Find the next executable operation in the queue
     /// @param startAfterId Start searching after this operation ID. Use bytes32(0) to start from the beginning.
-    /// @param maxIterations Maximum number of operations to check. Use 0 for no limit.
+    /// @param maxIterations Maximum number of operations to check. Use any big number, such as type(uint256).max, for no practical limit.
     /// @return id The ID of the next executable operation, or bytes32(0) if none found
     function getNextExecutableOperationId(bytes32 startAfterId, uint256 maxIterations) external view returns (bytes32 id) {
+        require(maxIterations > 0, "Timelock/zero-maxIterations");
         bytes32 operationId = startAfterId == bytes32(0) ? _operationIds.first : _operationIds.nodes[startAfterId].next;
 
         uint256 iterations;
-        while (operationId != bytes32(0) && (maxIterations == 0 || iterations < maxIterations)) {
+        while (operationId != bytes32(0) && iterations < maxIterations) {
             // Check if operation is ready
             if (isOperationReady(operationId)) {
                 // Check if predecessor is done, if any
