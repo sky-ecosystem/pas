@@ -175,10 +175,10 @@ contract Timelock is TimelockController, Pausable {
     function getNextExecutableOperationId(bytes32 startAfterId, uint256 maxIterations) external view returns (bytes32 id, bool isReady) {
         require(maxIterations > 0, "Timelock/zero-maxIterations");
         id = startAfterId == bytes32(0) ? _operationIds.first : _operationIds.nodes[startAfterId].next;
+        if (id == bytes32(0)) {
+            return (bytes32(0), false);
+        }
         for (uint256 i = 1;; i++) {
-            if (id == bytes32(0)) {
-                return (bytes32(0), false);
-            }
             // Check if operation is ready
             if (isOperationReady(id)) {
                 // Check if predecessor is done, if any
@@ -187,10 +187,14 @@ contract Timelock is TimelockController, Pausable {
                     return (id, true);
                 }
             }
+            bytes32 next = _operationIds.nodes[id].next;
+            if (next == bytes32(0)) {
+                return (bytes32(0), false);
+            }
             if (i == maxIterations) {
                 return (id, false);
             }
-            id = _operationIds.nodes[id].next;
+            id = next;
         }
     }
 

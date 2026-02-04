@@ -1170,17 +1170,17 @@ contract TimelockTest is Test {
         assertEq(id, id2, "Pagination case 6a: id should be id2");
         assertTrue(isReady, "Pagination case 6a: isReady should be true");
 
-        // Search with limit 1 starting after id3 - checks id4 (not ready), returns it
+        // Search with limit 1 starting after id3 - checks id4 (not ready), more elements exist so returns id4
         (id, isReady) = timelock.getNextExecutableOperationId(id3, 1);
         assertEq(id, id4, "Pagination case 6b: id should be id4 (last checked)");
         assertFalse(isReady, "Pagination case 6b: isReady should be false");
 
-        // Continue from id4 with limit 1 - checks id5 (not ready)
+        // Continue from id4 with limit 1 - checks id5 (not ready), but id5 is last element so returns exhausted
         (id, isReady) = timelock.getNextExecutableOperationId(id4, 1);
-        assertEq(id, id5, "Pagination case 6c: id should be id5 (last checked)");
+        assertEq(id, bytes32(0), "Pagination case 6c: id should be 0 (exhausted after checking last element)");
         assertFalse(isReady, "Pagination case 6c: isReady should be false");
 
-        // Continue from id5 - list exhausted
+        // Continue from id5 - list exhausted immediately (no next element)
         (id, isReady) = timelock.getNextExecutableOperationId(id5, type(uint256).max);
         assertEq(id, bytes32(0), "Pagination case 6d: id should be 0 (exhausted)");
         assertFalse(isReady, "Pagination case 6d: isReady should be false");
