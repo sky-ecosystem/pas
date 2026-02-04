@@ -896,8 +896,9 @@ contract TimelockTest is Test {
     // ============================================================================
 
     function testGetNextExecutableOperationEmpty() public view {
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, bytes32(0));
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, bytes32(0));
+        assertFalse(isReady);
     }
 
     function testGetNextExecutableOperationNotReady() public {
@@ -906,8 +907,9 @@ contract TimelockTest is Test {
         vm.prank(proposer);
         _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, bytes32(0));
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, bytes32(0));
+        assertFalse(isReady);
     }
 
     function testGetNextExecutableOperationReady() public {
@@ -918,8 +920,9 @@ contract TimelockTest is Test {
 
         vm.warp(block.timestamp + MIN_DELAY);
 
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, expectedId);
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, expectedId);
+        assertTrue(isReady);
     }
 
     function testGetNextExecutableOperationMultipleReturnsFirst() public {
@@ -939,8 +942,9 @@ contract TimelockTest is Test {
 
         vm.warp(block.timestamp + MIN_DELAY);
 
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, id1);
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, id1);
+        assertTrue(isReady);
     }
 
     function testGetNextExecutableOperationChangesAfterExecution() public {
@@ -954,13 +958,15 @@ contract TimelockTest is Test {
 
         vm.warp(block.timestamp + MIN_DELAY);
 
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, id1);
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, id1);
+        assertTrue(isReady);
 
         _execute(address(mockTarget), 0, data1, bytes32(0), keccak256("s1"));
 
-        (readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, id2);
+        (id, isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, id2);
+        assertTrue(isReady);
     }
 
     function testGetNextExecutableOperationWithMaxIterations() public {
@@ -971,7 +977,7 @@ contract TimelockTest is Test {
         // Schedule 3 operations with long delay (not ready)
         _schedule(address(mockTarget), 0, data, bytes32(0), keccak256("s1"), 10 days);
         _schedule(address(mockTarget), 0, data, bytes32(0), keccak256("s2"), 10 days);
-        _schedule(address(mockTarget), 0, data, bytes32(0), keccak256("s3"), 10 days);
+        bytes32 id3 = _schedule(address(mockTarget), 0, data, bytes32(0), keccak256("s3"), 10 days);
         // Schedule 1 operation with short delay (will be ready)
         bytes32 expectedReadyId = _schedule(address(mockTarget), 0, data, bytes32(0), keccak256("s4"), MIN_DELAY);
         // Schedule 1 more with long delay
@@ -980,17 +986,21 @@ contract TimelockTest is Test {
 
         vm.warp(block.timestamp + MIN_DELAY);
 
-        // With maxIterations=3, should not find the ready operation (it's at position 4);
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), 3);
-        assertEq(readyId, bytes32(0), "Should not find with limit 3");
+        // With maxIterations=3, should not find the ready operation (it's at position 4)
+        // Returns the last checked id (s3) with isReady=false
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), 3);
+        assertEq(id, id3, "Should return last checked id with limit 3");
+        assertFalse(isReady, "Should not be ready with limit 3");
 
         // With maxIterations=4, should find it
-        (readyId,) = timelock.getNextExecutableOperationId(bytes32(0), 4);
-        assertEq(readyId, expectedReadyId, "Should find with limit 4");
+        (id, isReady) = timelock.getNextExecutableOperationId(bytes32(0), 4);
+        assertEq(id, expectedReadyId, "Should find with limit 4");
+        assertTrue(isReady, "Should be ready with limit 4");
 
         // With maxIterations=100, should also find it
-        (readyId,) = timelock.getNextExecutableOperationId(bytes32(0), 100);
-        assertEq(readyId, expectedReadyId, "Should find with limit 100");
+        (id, isReady) = timelock.getNextExecutableOperationId(bytes32(0), 100);
+        assertEq(id, expectedReadyId, "Should find with limit 100");
+        assertTrue(isReady, "Should be ready with limit 100");
     }
 
     function testGetNextExecutableOperationZeroMaxIterationsReverts() public {
@@ -1004,8 +1014,9 @@ contract TimelockTest is Test {
         _schedule(address(mockTarget), 0, data, bytes32(0), SALT, MIN_DELAY);
 
         // Starting after a non-existent ID returns bytes32(0) since .next returns bytes32(0)
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(keccak256("nonexistent"), type(uint256).max);
-        assertEq(readyId, bytes32(0));
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(keccak256("nonexistent"), type(uint256).max);
+        assertEq(id, bytes32(0));
+        assertFalse(isReady);
     }
 
     function testGetNextExecutableOperationLargeMaxIterations() public {
@@ -1016,8 +1027,9 @@ contract TimelockTest is Test {
         vm.warp(block.timestamp + MIN_DELAY);
 
         // Very large maxIterations should not overflow
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, expectedId);
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, expectedId);
+        assertTrue(isReady);
     }
 
     function testGetNextExecutableOperationPagination() public {
@@ -1034,16 +1046,19 @@ contract TimelockTest is Test {
         vm.warp(block.timestamp + MIN_DELAY);
 
         // First call finds id1
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, id1);
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, id1);
+        assertTrue(isReady);
 
         // Continue from id1, finds id3
-        (readyId,) = timelock.getNextExecutableOperationId(id1, type(uint256).max);
-        assertEq(readyId, id3);
+        (id, isReady) = timelock.getNextExecutableOperationId(id1, type(uint256).max);
+        assertEq(id, id3);
+        assertTrue(isReady);
 
-        // Continue from id3, nothing ready left
-        (readyId,) = timelock.getNextExecutableOperationId(id3, type(uint256).max);
-        assertEq(readyId, bytes32(0));
+        // Continue from id3, nothing ready left (list exhausted)
+        (id, isReady) = timelock.getNextExecutableOperationId(id3, type(uint256).max);
+        assertEq(id, bytes32(0));
+        assertFalse(isReady);
     }
 
     function testGetNextExecutableOperationSkipsPendingPredecessor() public {
@@ -1063,8 +1078,9 @@ contract TimelockTest is Test {
         vm.warp(block.timestamp + MIN_DELAY);
 
         // Should skip id1 (not ready), skip id2 (predecessor not done), return id3
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, id3);
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, id3);
+        assertTrue(isReady);
     }
 
     function testGetNextExecutableOperationWithDonePredecessor() public {
@@ -1082,24 +1098,26 @@ contract TimelockTest is Test {
         vm.warp(block.timestamp + MIN_DELAY);
 
         // Before executing predecessor: should return id1 (id2's predecessor not done)
-        (bytes32 readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, id1);
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, id1);
+        assertTrue(isReady);
 
         // Execute id1 (predecessor is now done)
         _execute(address(mockTarget), 0, data1, bytes32(0), keccak256("s1"));
 
         // Now id2's predecessor is done, should return id2
-        (readyId,) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, id2);
+        (id, isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, id2);
+        assertTrue(isReady);
     }
 
-    function testGetNextExecutableOperationLastCheckedId() public {
+    function testGetNextExecutableOperationReturnValues() public {
         bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
 
-        // Case 1: Empty list - both return values should be bytes32(0)
-        (bytes32 readyId, bytes32 lastCheckedId) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, bytes32(0), "Empty list: readyId should be 0");
-        assertEq(lastCheckedId, bytes32(0), "Empty list: lastCheckedId should be 0");
+        // Case 1: Empty list - id should be bytes32(0), isReady should be false
+        (bytes32 id, bool isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, bytes32(0), "Empty list: id should be 0");
+        assertFalse(isReady, "Empty list: isReady should be false");
 
         // Schedule 4 operations with long delays (none ready)
         vm.startPrank(proposer);
@@ -1109,35 +1127,35 @@ contract TimelockTest is Test {
         bytes32 id3 = _schedule(address(mockTarget), 0, data, bytes32(0), keccak256("s3"), 10 days);
         vm.stopPrank();
 
-        // Case 2: No operations ready, maxIterations reached - lastCheckedId should be the last checked
-        (readyId, lastCheckedId) = timelock.getNextExecutableOperationId(bytes32(0), 2);
-        assertEq(readyId, bytes32(0), "Not ready, limit 2: readyId should be 0");
-        assertEq(lastCheckedId, id1, "Not ready, limit 2: lastCheckedId should be id1");
+        // Case 2: No operations ready, maxIterations reached - id should be last checked, isReady false
+        (id, isReady) = timelock.getNextExecutableOperationId(bytes32(0), 2);
+        assertEq(id, id1, "Not ready, limit 2: id should be id1 (last checked)");
+        assertFalse(isReady, "Not ready, limit 2: isReady should be false");
 
-        (readyId, lastCheckedId) = timelock.getNextExecutableOperationId(bytes32(0), 3);
-        assertEq(readyId, bytes32(0), "Not ready, limit 3: readyId should be 0");
-        assertEq(lastCheckedId, id2, "Not ready, limit 3: lastCheckedId should be id2");
+        (id, isReady) = timelock.getNextExecutableOperationId(bytes32(0), 3);
+        assertEq(id, id2, "Not ready, limit 3: id should be id2 (last checked)");
+        assertFalse(isReady, "Not ready, limit 3: isReady should be false");
 
-        // Case 3: No operations ready, list exhausted - both should be bytes32(0)
-        (readyId, lastCheckedId) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, bytes32(0), "Not ready, exhausted: readyId should be 0");
-        assertEq(lastCheckedId, bytes32(0), "Not ready, exhausted: lastCheckedId should be 0");
+        // Case 3: No operations ready, list exhausted - id should be bytes32(0), isReady false
+        (id, isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, bytes32(0), "Not ready, exhausted: id should be 0");
+        assertFalse(isReady, "Not ready, exhausted: isReady should be false");
 
         // Make operations ready
         vm.warp(block.timestamp + 10 days);
 
-        // Case 4: Ready operation found - both should be the ready operation id
-        (readyId, lastCheckedId) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
-        assertEq(readyId, id0, "Ready found: readyId should be id0");
-        assertEq(lastCheckedId, id0, "Ready found: lastCheckedId should be id0");
+        // Case 4: Ready operation found - id should be the ready operation, isReady true
+        (id, isReady) = timelock.getNextExecutableOperationId(bytes32(0), type(uint256).max);
+        assertEq(id, id0, "Ready found: id should be id0");
+        assertTrue(isReady, "Ready found: isReady should be true");
 
         // Case 5: Ready operation found after startAfterId
-        (readyId, lastCheckedId) = timelock.getNextExecutableOperationId(id1, type(uint256).max);
-        assertEq(readyId, id2, "Ready after id1: readyId should be id2");
-        assertEq(lastCheckedId, id2, "Ready after id1: lastCheckedId should be id2");
+        (id, isReady) = timelock.getNextExecutableOperationId(id1, type(uint256).max);
+        assertEq(id, id2, "Ready after id1: id should be id2");
+        assertTrue(isReady, "Ready after id1: isReady should be true");
 
-        // Case 6: Pagination - use lastCheckedId to continue searching
-        // Cancel id0 and id1 so they won't be found, schedule new not-ready ops at the front
+        // Case 6: Pagination - use returned id to continue searching
+        // Cancel id0 and id1 so they won't be found, schedule new not-ready ops
         vm.startPrank(proposer);
         timelock.cancel(id0);
         timelock.cancel(id1);
@@ -1148,24 +1166,24 @@ contract TimelockTest is Test {
 
         // Now list is: id2 (ready), id3 (ready), id4 (not ready), id5 (not ready)
         // Search with limit 1 starting from beginning - finds id2 immediately
-        (readyId, lastCheckedId) = timelock.getNextExecutableOperationId(bytes32(0), 1);
-        assertEq(readyId, id2, "Pagination case 6a: readyId should be id2");
-        assertEq(lastCheckedId, id2, "Pagination case 6a: lastCheckedId should be id2");
+        (id, isReady) = timelock.getNextExecutableOperationId(bytes32(0), 1);
+        assertEq(id, id2, "Pagination case 6a: id should be id2");
+        assertTrue(isReady, "Pagination case 6a: isReady should be true");
 
-        // Search with limit 1 starting after id3 - checks id4 (not ready), returns it as lastCheckedId
-        (readyId, lastCheckedId) = timelock.getNextExecutableOperationId(id3, 1);
-        assertEq(readyId, bytes32(0), "Pagination case 6b: readyId should be 0");
-        assertEq(lastCheckedId, id4, "Pagination case 6b: lastCheckedId should be id4");
+        // Search with limit 1 starting after id3 - checks id4 (not ready), returns it
+        (id, isReady) = timelock.getNextExecutableOperationId(id3, 1);
+        assertEq(id, id4, "Pagination case 6b: id should be id4 (last checked)");
+        assertFalse(isReady, "Pagination case 6b: isReady should be false");
 
-        // Continue from lastCheckedId with limit 1 - checks id5 (not ready)
-        (readyId, lastCheckedId) = timelock.getNextExecutableOperationId(id4, 1);
-        assertEq(readyId, bytes32(0), "Pagination case 6c: readyId should be 0");
-        assertEq(lastCheckedId, id5, "Pagination case 6c: lastCheckedId should be id5");
+        // Continue from id4 with limit 1 - checks id5 (not ready)
+        (id, isReady) = timelock.getNextExecutableOperationId(id4, 1);
+        assertEq(id, id5, "Pagination case 6c: id should be id5 (last checked)");
+        assertFalse(isReady, "Pagination case 6c: isReady should be false");
 
-        // Continue from lastCheckedId - list exhausted
-        (readyId, lastCheckedId) = timelock.getNextExecutableOperationId(id5, type(uint256).max);
-        assertEq(readyId, bytes32(0), "Pagination case 6d: readyId should be 0");
-        assertEq(lastCheckedId, bytes32(0), "Pagination case 6d: lastCheckedId should be 0 (exhausted)");
+        // Continue from id5 - list exhausted
+        (id, isReady) = timelock.getNextExecutableOperationId(id5, type(uint256).max);
+        assertEq(id, bytes32(0), "Pagination case 6d: id should be 0 (exhausted)");
+        assertFalse(isReady, "Pagination case 6d: isReady should be false");
     }
 
     function testGetOperationNonExistent() public view {
