@@ -170,31 +170,31 @@ contract Timelock is TimelockController, Pausable {
     /// @notice Find the next executable operation in the queue
     /// @param startAfterId Start searching after this operation ID. Use bytes32(0) to start from the beginning.
     /// @param maxIterations Maximum number of operations to check. Use any big number, such as type(uint256).max, for no practical limit.
-    /// @return id The operation ID: either a ready operation, the last checked ID (if maxIterations reached), or bytes32(0) (if list exhausted)
+    /// @return lastCheckedId The last checked operation ID: either a ready operation or not (if maxIterations reached), or bytes32(0) (if list exhausted)
     /// @return isReady True if the returned ID is a ready executable operation, false otherwise
-    function getNextExecutableOperationId(bytes32 startAfterId, uint256 maxIterations) external view returns (bytes32 id, bool isReady) {
+    function getNextExecutableOperationId(bytes32 startAfterId, uint256 maxIterations) external view returns (bytes32 lastCheckedId, bool isReady) {
         require(maxIterations > 0, "Timelock/zero-maxIterations");
-        id = startAfterId == bytes32(0) ? _operationIds.first : _operationIds.nodes[startAfterId].next;
-        if (id == bytes32(0)) {
+        lastCheckedId = startAfterId == bytes32(0) ? _operationIds.first : _operationIds.nodes[startAfterId].next;
+        if (lastCheckedId == bytes32(0)) {
             return (bytes32(0), false);
         }
         for (uint256 i = 1;; i++) {
             // Check if operation is ready
-            if (isOperationReady(id)) {
+            if (isOperationReady(lastCheckedId)) {
                 // Check if predecessor is done, if any
-                bytes32 predecessor = _operations[id].predecessor;
+                bytes32 predecessor = _operations[lastCheckedId].predecessor;
                 if (predecessor == bytes32(0) || isOperationDone(predecessor)) {
-                    return (id, true);
+                    return (lastCheckedId, true);
                 }
             }
-            bytes32 next = _operationIds.nodes[id].next;
-            if (next == bytes32(0)) {
+            bytes32 nextId = _operationIds.nodes[lastCheckedId].next;
+            if (nextId == bytes32(0)) {
                 return (bytes32(0), false);
             }
             if (i == maxIterations) {
-                return (id, false);
+                return (lastCheckedId, false);
             }
-            id = next;
+            lastCheckedId = nextId;
         }
     }
 
