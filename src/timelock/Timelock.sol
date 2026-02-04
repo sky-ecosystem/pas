@@ -170,24 +170,27 @@ contract Timelock is TimelockController, Pausable {
     /// @notice Find the next executable operation in the queue
     /// @param startAfterId Start searching after this operation ID. Use bytes32(0) to start from the beginning.
     /// @param maxIterations Maximum number of operations to check. Use any big number, such as type(uint256).max, for no practical limit.
-    /// @return id The ID of the next executable operation, or bytes32(0) if none found
-    function getNextExecutableOperationId(bytes32 startAfterId, uint256 maxIterations) external view returns (bytes32 id) {
+    /// @return readyId The ID of the next executable operation, or bytes32(0) if none found
+    /// @return lastCheckedId The last operation ID checked (for pagination), or bytes32(0) if list exhausted
+    function getNextExecutableOperationId(bytes32 startAfterId, uint256 maxIterations) external view returns (bytes32 readyId, bytes32 lastCheckedId) {
         require(maxIterations > 0, "Timelock/zero-maxIterations");
-        bytes32 operationId = startAfterId == bytes32(0) ? _operationIds.first : _operationIds.nodes[startAfterId].next;
-
-        uint256 iterations;
-        while (operationId != bytes32(0) && iterations < maxIterations) {
+        bytes32 id = startAfterId == bytes32(0) ? _operationIds.first : _operationIds.nodes[startAfterId].next;
+        for (uint256 i = 1;; i++) {
+            if (id == bytes32(0)) {
+                return (bytes32(0), bytes32(0));
+            }
             // Check if operation is ready
-            if (isOperationReady(operationId)) {
+            if (isOperationReady(id)) {
                 // Check if predecessor is done, if any
-                bytes32 predecessor = _operations[operationId].predecessor;
+                bytes32 predecessor = _operations[id].predecessor;
                 if (predecessor == bytes32(0) || isOperationDone(predecessor)) {
-                    return operationId;
+                    return (id, id);
                 }
             }
-
-            operationId = _operationIds.nodes[operationId].next;
-            iterations++;
+            if (i == maxIterations) {
+                return (bytes32(0), id);
+            }
+            id = _operationIds.nodes[id].next;
         }
     }
 
