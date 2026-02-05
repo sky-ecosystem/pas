@@ -98,9 +98,9 @@ contract Timelock is TimelockController, Pausable {
         for (uint256 i = 0; i < targets.length; ++i) {
             require(targets[i] != address(this), "Timelock/self-calls-disabled");
         }
-        
+
         super.scheduleBatch(targets, values, payloads, predecessor, salt, delay);
-        
+
         // Track operation for keeper jobs
         bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
         _operationIds.add(id);
@@ -167,39 +167,27 @@ contract Timelock is TimelockController, Pausable {
     // Operations may still not be executable due to various downstream conditions.
     // It is assumed that this is not a perfect fetching mechanism and that if needed proposals
     // can be executed without cron keepers, or canceled in case they are jamming this mechanism.
-    /// @notice Find the next executable operation in the queue
-    /// @param startAfterId Start searching after this operation ID. Use bytes32(0) to start from the beginning.
-    /// @param maxIterations Maximum number of operations to check. Use any big number, such as type(uint256).max, for no practical limit.
-    /// @return lastCheckedId The last checked operation ID: either a ready operation or not (if maxIterations reached), or bytes32(0) (if list exhausted)
-    /// @return isReady True if the returned ID is a ready executable operation, false otherwise
-    function getNextExecutableOperationId(bytes32 startAfterId, uint256 maxIterations) external view returns (bytes32 lastCheckedId, bool isReady) {
+    // returns - If found: the executable operation. If not found: the next startId to continue from, or bytes32(0) if exhausted.
+    function getNextExecutableOperationId(bytes32 startId, uint256 maxIterations) external view returns (bool found, bytes32 id) {
         require(maxIterations > 0, "Timelock/zero-maxIterations");
-        lastCheckedId = startAfterId == bytes32(0) ? _operationIds.first : _operationIds.nodes[startAfterId].next;
-        if (lastCheckedId == bytes32(0)) {
-            return (bytes32(0), false);
+        require(startId == bytes32(0) || _operationIds.exists[startId], "Timelock/invalid-startId");
+
+        id = startId == bytes32(0) ? _operationIds.first : startId;
+
+        uint256 i = 0;
+        while (id != bytes32(0) && i++ < maxIterations) {
+            if (isOperationReady(id)) {
+                bytes32 predecessor = _operations[id].predecessor;
+                if (predecessor == bytes32(0) || isOperationDone(predecessor)) return (true, id);
+            }
+
+            id = _operationIds.nodes[id].next;
         }
-        for (uint256 i = 1;; i++) {
-            // Check if operation is ready
-            if (isOperationReady(lastCheckedId)) {
-                // Check if predecessor is done, if any
-                bytes32 predecessor = _operations[lastCheckedId].predecessor;
-                if (predecessor == bytes32(0) || isOperationDone(predecessor)) {
-                    return (lastCheckedId, true);
-                }
-            }
-            bytes32 nextId = _operationIds.nodes[lastCheckedId].next;
-            if (nextId == bytes32(0)) {
-                return (bytes32(0), false);
-            }
-            if (i == maxIterations) {
-                return (lastCheckedId, false);
-            }
-            lastCheckedId = nextId;
-        }
+
+        return (false, id);
     }
 
     function getOperation(bytes32 id) external view returns (Operation memory op) {
         return _operations[id];
     }
 }
-
