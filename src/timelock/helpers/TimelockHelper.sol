@@ -29,9 +29,7 @@ contract TimelockHelper {
 
     TimelockLike immutable public timelock;
 
-    constructor(
-        address timelock_
-    ) {
+    constructor(address timelock_) {
         timelock = TimelockLike(timelock_);
     }
 
@@ -40,8 +38,8 @@ contract TimelockHelper {
     // can be executed without cron keepers, or canceled in case they are jamming this mechanism.
     // returns - If found: the executable operation. If not found: the next startId to continue from, or bytes32(0) if exhausted.
     function getNextExecutableOperationId(bytes32 startId, uint256 maxIterations) external view returns (bool found, bytes32 id) {
-        require(maxIterations > 0, "Timelock/zero-maxIterations");
-        require(startId == bytes32(0) || timelock.getOperationExists(startId), "Timelock/invalid-startId");
+        require(maxIterations > 0, "TimelockHelper/zero-maxIterations");
+        require(startId == bytes32(0) || timelock.getOperationExists(startId), "TimelockHelper/invalid-startId");
 
         id = startId == bytes32(0) ? timelock.getFirstOperationId() : startId;
 

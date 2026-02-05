@@ -173,7 +173,7 @@ contract TimelockHelperTest is Test {
     }
 
     function testGetNextExecutableOperationZeroMaxIterationsReverts() public {
-        vm.expectRevert("Timelock/zero-maxIterations");
+        vm.expectRevert("TimelockHelper/zero-maxIterations");
         timelockHelper.getNextExecutableOperationId(bytes32(0), 0);
     }
 
@@ -182,7 +182,7 @@ contract TimelockHelperTest is Test {
         _schedule(address(123), 0, data, bytes32(0), SALT, MIN_DELAY);
 
         // Starting with a non-existent ID reverts
-        vm.expectRevert("Timelock/invalid-startId");
+        vm.expectRevert("TimelockHelper/invalid-startId");
         timelockHelper.getNextExecutableOperationId(keccak256("nonexistent"), type(uint256).max);
     }
 
