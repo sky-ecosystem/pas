@@ -137,15 +137,19 @@ contract Timelock is TimelockController, Pausable {
     }
 
     // ------------------------------------------------------------------------
-    // Keeper job helpers
+    // Operations getters
     // ------------------------------------------------------------------------
 
-    function getOperationCount() external view returns (uint256) {
-        return _operationIds.count;
+    function getFirstOperationId() external view returns (bytes32) {
+        return _operationIds.first;
     }
 
-    function getOperationExists(bytes32 id) external view returns (bool) {
-        return _operationIds.exists[id];
+    function getLastOperationId() external view returns (bytes32) {
+        return _operationIds.last;
+    }
+
+    function getOperationsCount() external view returns (uint256) {
+        return _operationIds.count;
     }
 
     function getPrevOperationId(bytes32 id) external view returns (bytes32) {
@@ -156,38 +160,35 @@ contract Timelock is TimelockController, Pausable {
         return _operationIds.nodes[id].next;
     }
 
-    function getFirstOperationId() external view returns (bytes32) {
-        return _operationIds.first;
-    }
-
-    function getLastOperationId() external view returns (bytes32) {
-        return _operationIds.last;
-    }
-
-    // Operations may still not be executable due to various downstream conditions.
-    // It is assumed that this is not a perfect fetching mechanism and that if needed proposals
-    // can be executed without cron keepers, or canceled in case they are jamming this mechanism.
-    // returns - If found: the executable operation. If not found: the next startId to continue from, or bytes32(0) if exhausted.
-    function getNextExecutableOperationId(bytes32 startId, uint256 maxIterations) external view returns (bool found, bytes32 id) {
-        require(maxIterations > 0, "Timelock/zero-maxIterations");
-        require(startId == bytes32(0) || _operationIds.exists[startId], "Timelock/invalid-startId");
-
-        id = startId == bytes32(0) ? _operationIds.first : startId;
-
-        uint256 i = 0;
-        while (id != bytes32(0) && i++ < maxIterations) {
-            if (isOperationReady(id)) {
-                bytes32 predecessor = _operations[id].predecessor;
-                if (predecessor == bytes32(0) || isOperationDone(predecessor)) return (true, id);
-            }
-
-            id = _operationIds.nodes[id].next;
-        }
-
-        return (false, id);
+    function getOperationExists(bytes32 id) external view returns (bool) {
+        return _operationIds.exists[id];
     }
 
     function getOperation(bytes32 id) external view returns (Operation memory op) {
         return _operations[id];
+    }
+
+    function getOperationLength(bytes32 id) external view returns (uint256) {
+        return _operations[id].targets.length;
+    }
+
+    function getOperationTarget(bytes32 id, uint256 index) external view returns (address) {
+        return _operations[id].targets[index];
+    }
+
+    function getOperationValue(bytes32 id, uint256 index) external view returns (uint256) {
+        return _operations[id].values[index];
+    }
+
+    function getOperationPayload(bytes32 id, uint256 index) external view returns (bytes memory) {
+        return _operations[id].payloads[index];
+    }
+
+    function getOperationPredecessor(bytes32 id) external view returns (bytes32) {
+        return _operations[id].predecessor;
+    }
+
+    function getOperationSalt(bytes32 id) external view returns (bytes32) {
+        return _operations[id].salt;
     }
 }

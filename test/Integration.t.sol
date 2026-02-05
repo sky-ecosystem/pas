@@ -531,7 +531,7 @@ contract IntegrationTest is DssTest {
         timelock.cancel(operationId);
 
         assertFalse(timelock.isOperationPending(operationId), "operation should be cancelled");
-        assertEq(timelock.getOperationCount(), 0, "operation count should be 0");
+        assertEq(timelock.getOperationsCount(), 0, "operation count should be 0");
     }
 
     function testCancellerCanCancelOperation() public {
