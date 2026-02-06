@@ -16,4 +16,4 @@
 - It is assumed the Core Council would not block withdrawals or emergency mechanisms on purpose.
 - It is expected to be considered whether a default rate limits / calldata can be applied simultaneously on many controllers, thus amplifying potential harm. For example, the damage of depositing into a new vault without applying slippage protection might be amplified if it can be done for all whitelisted controllers. In general it is assumed that as the system scales more protections are added for such scenarios.
 - It is assumed that cBEAMs and Core Council are synced in their operations, including timing their actions against Timelock executions.
-- It is assumed the cancelers are available on short notice to remove proposals if needed. This includes deprecating removing old calldata/rate-limits in a timely manner.
+- It is assumed the cancelers are available on short notice to remove proposals if needed. This includes removing old calldata/rate-limits in a timely manner.
