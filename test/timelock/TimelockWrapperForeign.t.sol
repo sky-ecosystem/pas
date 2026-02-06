@@ -425,7 +425,7 @@ contract TimelockWrapperForeignTest is DssTest {
         vm.prank(coreCouncil);
         bytes32 id = wrapper.batchAddInitRateLimits(configs, bytes32(0), salt, MIN_DELAY);
         assertEq(id, expectedId);
-        assertEq(timelock.getOperationCount(), 1);
+        assertEq(timelock.getOperationsCount(), 1);
 
         vm.warp(block.timestamp + MIN_DELAY);
         timelock.executeBatch(targets, values, payloads, bytes32(0), salt);
