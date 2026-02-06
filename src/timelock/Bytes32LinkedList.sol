@@ -37,9 +37,7 @@ library Bytes32LinkedList {
     /// @param id The bytes32 value to add
     /// @return success True if the item was added, false if it already exists
     function add(List storage list, bytes32 id) internal returns (bool success) {
-        require(id != bytes32(0), "id-null");
-
-        if (list.exists[id]) {
+        if (id == bytes32(0) || list.exists[id]) {
             return false;
         }
 

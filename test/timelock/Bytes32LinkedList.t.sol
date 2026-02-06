@@ -142,9 +142,10 @@ contract Bytes32LinkedListTest is Test {
         assertEq(wrapper.count(), 1);
     }
 
-    function testAddingBytes32ZeroReverts() public {
-        vm.expectRevert("id-null");
-        wrapper.add(bytes32(0));
+    function testAddingBytes32ZeroIsNoOp() public {
+        assertFalse(wrapper.add(bytes32(0)));
+
+        assertEq(wrapper.count(), 0);
     }
 
     // ============================================================================
