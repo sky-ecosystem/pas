@@ -35,7 +35,7 @@ library Bytes32LinkedList {
     /// @notice Add a new item to the end of the list
     /// @param list The list to add to
     /// @param id The bytes32 value to add
-    /// @return success True if the item was added, false if it already exists
+    /// @return success True if the item was added, false if it is bytes32(0) or already exists
     function add(List storage list, bytes32 id) internal returns (bool success) {
         if (id == bytes32(0) || list.exists[id]) {
             return false;
