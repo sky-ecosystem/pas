@@ -31,7 +31,7 @@ contract BeamStateTest is DssTest {
     address constant TARGET2 = address(0xA2);
 
     event SetUserRole(address indexed who, uint8 indexed role, bool enabled);
-    event SetRoleAction(uint8 indexed role, bytes4 sig, bool enabled);
+    event SetRoleAction(uint8 indexed role, bytes4 indexed sig, bool enabled);
     event Stop();
     event Start();
     event SetHop(address indexed rateLimits, uint256 value);

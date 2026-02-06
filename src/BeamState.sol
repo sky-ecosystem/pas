@@ -23,18 +23,19 @@ contract BeamState {
     // Note: Some of the variables defined here are for controlling the actions of the Configurator.
     // That's why they might not have a direct apparent reason within this contract itself.
 
+    // Note: allowed == 0 => false, allowed == 1 => true
     mapping(address usr => uint256 allowed)                                         public wards;
     mapping(address usr => bytes32 rolesData)                                       public userRoles;
     mapping(bytes4  sig => bytes32 rolesData)                                       public actionsRoles;
-    mapping(address rateLimits_ => uint256 added)                                   public rateLimits;            // allowed == 0 => false, allowed == 1 => true
-    mapping(address controller => uint256 added)                                    public controllers;           // allowed == 0 => false, allowed == 1 => true
-    mapping(address cBeam => uint256 added)                                         public cBeams;                // allowed == 0 => false, allowed == 1 => true
-    mapping(address rateLimits_ => mapping(address cBeam => uint256 allowed))       public rateLimitsCBeams;      // allowed == 0 => false, allowed == 1 => true
-    mapping(address controller => mapping(address cBeam => uint256 allowed))        public controllersCBeams;     // allowed == 0 => false, allowed == 1 => true
-    mapping(bytes32 key => mapping(address rateLimits_ => DefaultRateLimits limit)) public initRateLimits;        // rateLimits == address(0) every rateLimits allowed
-    mapping(bytes32 key => mapping(address controller => bool allowed))             public initControllerActions; // controller == address(0) every controller allowed
-    mapping(address rateLimits_ => uint256 value)                                   public hop;                   // rateLimits == address(0) => general backup configuration
-    mapping(address rateLimits_ => uint256 value)                                   public maxChange;             // rateLimits == address(0) => general backup configuration
+    mapping(address rateLimits_ => uint256 allowed)                                 public rateLimits;
+    mapping(address controller => uint256 allowed)                                  public controllers;
+    mapping(address cBeam => uint256 allowed)                                       public cBeams;
+    mapping(address rateLimits_ => mapping(address cBeam => uint256 allowed))       public rateLimitsCBeams;
+    mapping(address controller => mapping(address cBeam => uint256 allowed))        public controllersCBeams;
+    mapping(bytes32 key => mapping(address rateLimits_ => DefaultRateLimits limit)) public initRateLimits;        // rateLimits == address(0) => general fallback configuration
+    mapping(bytes32 key => mapping(address controller => uint256 allowed))          public initControllerActions; // controller == address(0) => general fallback configuration
+    mapping(address rateLimits_ => uint256 value)                                   public hop;                   // rateLimits == address(0) => general fallback configuration
+    mapping(address rateLimits_ => uint256 value)                                   public maxChange;             // rateLimits == address(0) => general fallback configuration
 
     bool public stopped;
 
@@ -52,7 +53,7 @@ contract BeamState {
     event Rely(address indexed usr);
     event Deny(address indexed usr);
     event SetUserRole(address indexed who, uint8 indexed role, bool enabled);
-    event SetRoleAction(uint8 indexed role, bytes4 sig, bool enabled);
+    event SetRoleAction(uint8 indexed role, bytes4 indexed sig, bool enabled);
     event Stop();
     event Start();
     event SetHop(address indexed rateLimits_, uint256 value);
@@ -121,8 +122,8 @@ contract BeamState {
     }
 
     function isControllerActionEnabled(bytes32 key, address controller) external view returns (bool ok) {
-        ok = initControllerActions[key][address(0)] || // address(0) enabled for every controller
-             initControllerActions[key][controller];
+        ok = initControllerActions[key][address(0)] == 1 || // address(0) enabled for every controller
+             initControllerActions[key][controller] == 1;
     }
 
     // --- Admin functions ---
@@ -254,13 +255,12 @@ contract BeamState {
     }
 
     function addInitControllerActions(bytes calldata data, address controller) external roleAuth returns (bytes32 key) {
-        key = keccak256(data);
-        initControllerActions[key][controller] = true;
+        initControllerActions[key = keccak256(data)][controller] = 1;
         emit AddInitControllerActions(key, controller);
     }
 
     function delInitControllerActions(bytes32 key, address controller) external roleAuth {
-        delete initControllerActions[key][controller];
+        initControllerActions[key][controller] = 0;
         emit DelInitControllerActions(key, controller);
     }
 }
