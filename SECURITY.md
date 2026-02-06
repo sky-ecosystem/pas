@@ -3,11 +3,11 @@
 - The following entities are trusted:
   - **Timelock**: Fully trusted.
   - **Core Council**: Very highly trusted.
-  - **cBEAMs**: Mostly trusted (malicious activity is assumed to be of very low likelihood).
+  - **cBEAMs**: Mostly trusted (a trusted team's multisig, malicious activity is assumed to be of very low likelihood).
 
 - It is assumed proposers or cancelers would not cancel proposals maliciously (including Core Council).
 - It is assumed that before adding calldata, rate limits, or whitelisting targets, security related scenarios are thoroughly considered.
-- As part of the above considerations, possible missalignment of cBEAMs are expected to be taken into consideration (although unlikely). For example:
+- As part of the above considerations, possible missalignment of cBEAMs is expected to be taken into consideration (although unlikely). For example:
   1. Omission - not executing a call when expected
   2. Double execution - executing the same call twice
   3. Stale execution - executing an old call after a newer one superseded it
