@@ -39,6 +39,8 @@ interface ControllerLike {
     // otcs returns: (buffer, rechargeRate18, sent18, sentTimestamp, claimed18)
     function otcs(address) external view returns (address, uint256, uint256, uint256, uint256);
     function otcWhitelistedAssets(address, address) external view returns (bool);
+    // uniswapV4TickLimits returns: (tickLowerMin, tickUpperMax, maxTickSpacing)
+    function uniswapV4TickLimits(bytes32) external view returns (int24, int24, uint24);
     // Grove-specific getters
     function centrifugeRecipients(uint16) external view returns (bytes32);
     // uniswapV3PoolParams returns: (swapMaxTickDelta, addLiquidityLowerTick, addLiquidityUpperTick, twapSecondsAgo)
@@ -59,8 +61,8 @@ contract TimelockWrapperMainnetTest is DssTest {
     event ProposalSubmitted(bytes32 indexed operationId, string functionName);
 
     // --- Mainnet Addresses ---
-    // https://github.com/sparkdotfi/spark-address-registry/blob/0a06d13c3e9d36428a6f916ac25528d82154517b/src/Ethereum.sol
-    address constant SPARK_CONTROLLER = 0xE52d643B27601D4d2BAB2052f30cf936ed413cec;
+    // https://github.com/sparkdotfi/spark-address-registry/blob/7ed39b0c31043bed076dc8734be65afab4cabec1/src/Ethereum.sol
+    address constant SPARK_CONTROLLER = 0xc9ff605003A1b389980f650e1aEFA1ef25C8eE32;
     address constant SPARK_PROXY      = 0x3300f198988e4C9C63F75dF86De36421f06af8c4;
 
     // https://github.com/grove-labs/grove-address-registry/blob/dd625925ab44e89eadce0cb4258e32aae2dfa73e/src/Ethereum.sol
@@ -238,7 +240,7 @@ contract TimelockWrapperMainnetTest is DssTest {
     }
 
     function testTollModifiers() public {
-        bytes4[] memory tolledMethods = new bytes4[](22);
+        bytes4[] memory tolledMethods = new bytes4[](23);
         tolledMethods[0]  = wrapper.start.selector;
         tolledMethods[1]  = wrapper.setHop.selector;
         tolledMethods[2]  = wrapper.setMaxChange.selector;
@@ -255,12 +257,13 @@ contract TimelockWrapperMainnetTest is DssTest {
         tolledMethods[13] = wrapper.setOTCBuffer.selector;
         tolledMethods[14] = wrapper.setOTCRechargeRate.selector;
         tolledMethods[15] = wrapper.setOTCWhitelistedAsset.selector;
-        tolledMethods[16] = wrapper.setMaxExchangeRate.selector;
-        tolledMethods[17] = wrapper.setUniswapV3PoolMaxTickDelta.selector;
-        tolledMethods[18] = wrapper.setUniswapV3AddLiquidityLowerTickBound.selector;
-        tolledMethods[19] = wrapper.setUniswapV3AddLiquidityUpperTickBound.selector;
-        tolledMethods[20] = wrapper.setUniswapV3TwapSecondsAgo.selector;
-        tolledMethods[21] = wrapper.setCentrifugeRecipient.selector;
+        tolledMethods[16] = wrapper.setUniswapV4TickLimits.selector;
+        tolledMethods[17] = wrapper.setMaxExchangeRate.selector;
+        tolledMethods[18] = wrapper.setUniswapV3PoolMaxTickDelta.selector;
+        tolledMethods[19] = wrapper.setUniswapV3AddLiquidityLowerTickBound.selector;
+        tolledMethods[20] = wrapper.setUniswapV3AddLiquidityUpperTickBound.selector;
+        tolledMethods[21] = wrapper.setUniswapV3TwapSecondsAgo.selector;
+        tolledMethods[22] = wrapper.setCentrifugeRecipient.selector;
 
         vm.startPrank(address(0xBEEF));
         checkModifier(address(wrapper), "TimelockWrapperMainnet/not-whitelisted", tolledMethods);
@@ -733,6 +736,37 @@ contract TimelockWrapperMainnetTest is DssTest {
         }
 
         assertTrue(ControllerLike(SPARK_CONTROLLER).otcWhitelistedAssets(exchange, usdc));
+    }
+
+    // --- setUniswapV4TickLimits (Spark Only) ---
+
+    function testSetUniswapV4TickLimitsOnSparkController() public {
+        bytes32 poolId = keccak256("test-pool");
+        int24 tickLowerMin = -887220;
+        int24 tickUpperMax = 887220;
+        uint24 maxTickSpacing = 200;
+        bytes32 salt = keccak256("v4tick");
+
+        bytes32 expectedId = _expectedOperationId(
+            abi.encodeWithSelector(BeamState.addInitControllerActions.selector, abi.encodeWithSignature("setUniswapV4TickLimits(bytes32,int24,int24,uint24)", poolId, tickLowerMin, tickUpperMax, maxTickSpacing), SPARK_CONTROLLER),
+            bytes32(0),
+            salt
+        );
+
+        vm.expectEmit(true, true, true, true, address(wrapper));
+        emit ProposalSubmitted(expectedId, "setUniswapV4TickLimits");
+        vm.prank(coreCouncil);
+        bytes32 id = wrapper.setUniswapV4TickLimits(poolId, tickLowerMin, tickUpperMax, maxTickSpacing, SPARK_CONTROLLER, bytes32(0), salt, MIN_DELAY);
+        assertEq(id, expectedId);
+        (bytes memory data,) = _getControllerAction(id);
+        _execute(id);
+
+        vm.prank(cBeam);
+        configurator.callControllerAction(SPARK_CONTROLLER, data);
+        (int24 setTickLowerMin, int24 setTickUpperMax, uint24 setMaxTickSpacing) = ControllerLike(SPARK_CONTROLLER).uniswapV4TickLimits(poolId);
+        assertEq(setTickLowerMin, tickLowerMin);
+        assertEq(setTickUpperMax, tickUpperMax);
+        assertEq(setMaxTickSpacing, maxTickSpacing);
     }
 
     // --- setMaxExchangeRate (Spark & Grove) ---
