@@ -2,7 +2,7 @@
 
 - The following entities are trusted:
   - **Timelock**: Fully trusted.
-  - **Core Council**: Very highly trusted.
+  - **Core Council through direct actions**: Very highly trusted.
   - **cBEAMs**: Mostly trusted (a trusted team's multisig, malicious activity is assumed to be of very low likelihood).
 
 - It is assumed proposers or cancelers would not cancel proposals maliciously (including Core Council).
@@ -16,6 +16,7 @@
 - It is assumed the Core Council would not block withdrawals or emergency mechanisms on purpose.
 - It is expected to be considered whether a default rate limits / calldata can be applied simultaneously on many controllers, thus amplifying potential harm. For example, the damage of depositing into a new vault without applying slippage protection might be amplified if it can be done for all whitelisted controllers. In general it is assumed that as the system scales more protections are added for such scenarios.
 - It is assumed that cBEAMs and Core Council are synced in their operations, including timing their actions against Timelock executions.
-- It is assumed the cancelers are available on short notice to remove proposals if needed. This includes removing old calldata/rate-limits in a timely manner.
+- It is assumed the cancelers and Core Council are available on short notice to remove proposals and configurations if needed. This includes removing old calldata/rate-limits in a timely manner.
+- It is assumed pausers would not temporarily DoS the timelock on purpose.
 - As with other Sky contracts, a mom mechanism is not expected to be deployed on remote chains. It is expected to be sufficiently replaced with highly secured and trusted multisigs.
 
