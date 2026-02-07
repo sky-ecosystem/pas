@@ -217,7 +217,7 @@ contract BeamState {
     }
 
     // Note: Once cBEAMS are whitelisted they can be assigned to controllers/rate-limits (potentially without delay),
-    // so theoretically they can be positioned to interfere with each other. This is known and assumed to be monitored
+    // so theoretically they can be positioned to interfere with each other. This is known and assumed to be monitored.
 
     function setCBeamForRateLimits(address rateLimits_, address cBeam) external roleAuth {
         require(rateLimits[rateLimits_] == 1, "BeamState/not-existing-rateLimits");
