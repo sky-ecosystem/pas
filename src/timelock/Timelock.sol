@@ -103,7 +103,7 @@ contract Timelock is TimelockController, Pausable {
 
         // Track operation for keeper jobs
         bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
-        _operationIds.add(id);
+        require(_operationIds.add(id), "Timelock/add-failed");
         _operations[id] = Operation(targets, values, payloads, predecessor, salt);
     }
 
@@ -111,7 +111,7 @@ contract Timelock is TimelockController, Pausable {
     // If needed, the admin can atomically cancel any proposal right after unpausing.
     function cancel(bytes32 id) public virtual override whenNotPaused {
         super.cancel(id);
-        _operationIds.remove(id);
+        require(_operationIds.remove(id), "Timelock/remove-failed");
         delete _operations[id];
     }
 
@@ -132,7 +132,7 @@ contract Timelock is TimelockController, Pausable {
     ) public payable virtual override whenNotPaused {
         super.executeBatch(targets, values, payloads, predecessor, salt);
         bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
-        _operationIds.remove(id);
+        require(_operationIds.remove(id), "Timelock/remove-failed");
         delete _operations[id];
     }
 

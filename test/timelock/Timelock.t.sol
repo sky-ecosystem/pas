@@ -16,7 +16,7 @@
 
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
+import { Test, stdStorage, StdStorage } from "forge-std/Test.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
@@ -46,6 +46,8 @@ contract MockTarget {
 }
 
 contract TimelockTest is Test {
+    using stdStorage for StdStorage;
+
     Timelock       public timelock;
     MockTarget     public mockTarget;
     MockTarget     public mockTarget2;
@@ -1043,6 +1045,33 @@ contract TimelockTest is Test {
         assertEq(op.payloads[1], payloads[1]);
         assertEq(op.predecessor, predecessor);
         assertEq(op.salt, salt);
+    }
+
+    function testLinkedListRequiresOnCorruptedState() public {
+        bytes memory data = abi.encodeWithSelector(MockTarget.setValue.selector, 42);
+
+        // Test add-failed: corrupt exists[id] to true before scheduling
+        bytes32 id1 = _hashOperation(address(mockTarget), 0, data, bytes32(0), keccak256("s1"));
+        stdstore.target(address(timelock)).sig("getOperationExists(bytes32)").with_key(id1).checked_write(true);
+        vm.prank(proposer);
+        vm.expectRevert("Timelock/add-failed");
+        _schedule(address(mockTarget), 0, data, bytes32(0), keccak256("s1"), MIN_DELAY);
+
+        // Test remove-failed on cancel: corrupt exists[id] to false after scheduling
+        vm.prank(proposer);
+        bytes32 id2 = _schedule(address(mockTarget), 0, data, bytes32(0), keccak256("s2"), MIN_DELAY);
+        stdstore.target(address(timelock)).sig("getOperationExists(bytes32)").with_key(id2).checked_write(false);
+        vm.prank(proposer);
+        vm.expectRevert("Timelock/remove-failed");
+        timelock.cancel(id2);
+
+        // Test remove-failed on execute: corrupt exists[id] to false after scheduling
+        vm.prank(proposer);
+        bytes32 id3 = _schedule(address(mockTarget), 0, data, bytes32(0), keccak256("s3"), MIN_DELAY);
+        vm.warp(block.timestamp + MIN_DELAY);
+        stdstore.target(address(timelock)).sig("getOperationExists(bytes32)").with_key(id3).checked_write(false);
+        vm.expectRevert("Timelock/remove-failed");
+        _execute(address(mockTarget), 0, data, bytes32(0), keccak256("s3"));
     }
 
     function testIndividualGettersMatchCombinedGetter() public {
