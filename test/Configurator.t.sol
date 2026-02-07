@@ -17,8 +17,8 @@
 pragma solidity ^0.8.24;
 
 import "dss-test/DssTest.sol";
-import { Configurator, BeamStateLike, RateLimitsLike } from "../src/Configurator.sol";
-import { BeamState } from "../src/BeamState.sol";
+import { Configurator, BeamStateLike, RateLimitsLike } from "src/Configurator.sol";
+import { BeamState } from "src/BeamState.sol";
 
 // Mock TARGET contract implementing RateLimits interface
 contract MockTarget {

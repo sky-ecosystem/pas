@@ -17,7 +17,7 @@
 pragma solidity ^0.8.24;
 
 import "dss-test/DssTest.sol";
-import { BeamState } from "../src/BeamState.sol";
+import { BeamState } from "src/BeamState.sol";
 
 contract BeamStateTest is DssTest {
 
