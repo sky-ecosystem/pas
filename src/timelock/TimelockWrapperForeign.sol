@@ -234,9 +234,9 @@ contract TimelockWrapperForeign {
 
     // Role bytes32 can be computed off-chain and passed as parameter, e.g keccak256("RELAYER"), keccak256("FREEZER")
     function grantRole(
-        address controller,
         bytes32 role,
         address account,
+        address controller,
         bytes32 predecessor,
         bytes32 salt,
         uint256 delay
@@ -253,9 +253,9 @@ contract TimelockWrapperForeign {
     }
 
     function revokeRole(
-        address controller,
         bytes32 role,
         address account,
+        address controller,
         bytes32 predecessor,
         bytes32 salt,
         uint256 delay

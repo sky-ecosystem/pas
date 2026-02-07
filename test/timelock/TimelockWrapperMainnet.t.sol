@@ -483,7 +483,7 @@ contract TimelockWrapperMainnetTest is DssTest {
         vm.expectEmit(true, true, true, true, address(wrapper));
         emit ProposalSubmitted(expectedId, "grantRole");
         vm.prank(coreCouncil);
-        bytes32 id = wrapper.grantRole(controller, role, account, bytes32(0), salt, MIN_DELAY);
+        bytes32 id = wrapper.grantRole(role, account, controller, bytes32(0), salt, MIN_DELAY);
         assertEq(id, expectedId);
         (bytes memory data,) = _getControllerAction(id);
         _execute(id);
@@ -519,7 +519,7 @@ contract TimelockWrapperMainnetTest is DssTest {
         vm.expectEmit(true, true, true, true, address(wrapper));
         emit ProposalSubmitted(expectedId, "revokeRole");
         vm.prank(coreCouncil);
-        bytes32 id = wrapper.revokeRole(controller, role, account, bytes32(0), salt, MIN_DELAY);
+        bytes32 id = wrapper.revokeRole(role, account, controller, bytes32(0), salt, MIN_DELAY);
         assertEq(id, expectedId);
         (bytes memory data,) = _getControllerAction(id);
         _execute(id);
