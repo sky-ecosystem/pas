@@ -17,7 +17,7 @@
 pragma solidity ^0.8.24;
 
 /// @title Bytes32LinkedList
-/// @notice A double linked list library for non-zero bytes32 values
+/// @notice A doubly linked list library for non-zero bytes32 values
 library Bytes32LinkedList {
     struct Node {
         bytes32 prev;
