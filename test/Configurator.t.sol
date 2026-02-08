@@ -850,7 +850,6 @@ contract ConfiguratorTest is DssTest {
 
         vm.warp(block.timestamp + 86_400); // Any increase requires hop
 
-        // Stop the BeamState
         beamState.stop();
 
         // Try to set rate limit - should revert
@@ -858,7 +857,6 @@ contract ConfiguratorTest is DssTest {
         vm.expectRevert("Configurator/stopped");
         configurator.setRateLimit(address(target1), key, 600 * WAD, 6 * WAD);
 
-        // Restart the BeamState
         beamState.start();
 
         // Now it should work
@@ -875,7 +873,6 @@ contract ConfiguratorTest is DssTest {
         bytes memory data = abi.encodeWithSignature("controllerFunction(uint256)", 123);
         beamState.addInitControllerActions(data, address(0)); // Global whitelist
 
-        // Stop the BeamState
         beamState.stop();
 
         // Try to call controller action - should revert
@@ -883,7 +880,6 @@ contract ConfiguratorTest is DssTest {
         vm.expectRevert("Configurator/stopped");
         configurator.callControllerAction(address(target1), data);
 
-        // Restart the BeamState
         beamState.start();
 
         // Now it should work
