@@ -45,7 +45,6 @@ contract Timelock is TimelockController, Pausable {
     // - Do not allow proposals to change the min delay
 
     // Notes:
-    // - By default all proposers can also cancel any proposal, this should be taken into account to make sure that they are trusted and that specific cancellations do not cause big harm.
     // - Cancellers can cancel any proposal, not only ones they created. Same assumptions as above apply.
 
     constructor(
