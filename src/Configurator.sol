@@ -84,10 +84,6 @@ contract Configurator {
 
     // --- Internal functions ---
 
-    function _max(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        z = x > y ? x : y;
-    }
-
     function _min(uint256 x, uint256 y) internal pure returns (uint256 z) {
         z = x < y ? x : y;
     }
@@ -105,8 +101,17 @@ contract Configurator {
             uint256 maxChange = beamState.getMaxChange(rateLimits);
 
             // Ceiling is the max of (current * maxChange) and default
-            require(maxAmount <= _max(current.maxAmount * maxChange / WAD, defMaxAmount), "Configurator/exceeds-max-amount");
-            require(slope <= _max(current.slope * maxChange / WAD, defSlope), "Configurator/exceeds-max-slope");
+            require(
+                maxAmount <= defMaxAmount ||
+                maxAmount <= current.maxAmount || // avoid overflow when current maxAmount is type(uint256).max
+                maxAmount <= current.maxAmount * maxChange / WAD,
+                "Configurator/exceeds-max-amount"
+            );
+            require(
+                slope <= defSlope ||
+                slope <= current.slope * maxChange / WAD,
+                "Configurator/exceeds-max-slope"
+            );
 
             // Any increase requires hop
             if (maxAmount > current.maxAmount || slope > current.slope) {
