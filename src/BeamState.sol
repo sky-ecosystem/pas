@@ -106,10 +106,12 @@ contract BeamState {
     }
 
     function getHop(address rateLimits_) external view returns (uint256 hop_) {
+        // If not set for specific rateLimits, check in general
         hop_ = hop[rateLimits_]; hop_ = hop_ != 0 ? hop_ : hop[address(0)];
     }
 
     function getMaxChange(address rateLimits_) external view returns (uint256 maxChange_) {
+        // If not set for specific rateLimits, check in general
         maxChange_ = maxChange[rateLimits_]; maxChange_ = maxChange_ != 0 ? maxChange_ : maxChange[address(0)];
     }
 
