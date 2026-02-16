@@ -405,6 +405,22 @@ contract ConfiguratorTest is DssTest {
         assertEq(data.slope, 10 * WAD, "slope should be set correctly");
     }
 
+    function testSetRateLimitNoOverflowWhenCurrentSlopeIsMax() public {
+        bytes32 key = keccak256("overflow-slope-key");
+        _setupCBeam(address(target1), CBEAM1);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 500 * WAD);
+        // Current slope is type(uint256).max — would overflow in `current.slope * maxChange / WAD`
+        _setupRateLimitData(target1, key, 1_000 * WAD, type(uint256).max, 1_000 * WAD, block.timestamp);
+
+        // Decrease slope to finite value above defaults — should not overflow
+        vm.prank(CBEAM1);
+        configurator.setRateLimit(address(target1), key, 1_000 * WAD, 1_000 * WAD);
+
+        RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
+        assertEq(data.maxAmount, 1_000 * WAD, "maxAmount should be set correctly");
+        assertEq(data.slope, 1_000 * WAD, "slope should decrease from type(uint256).max");
+    }
+
     // --- LastAmount Capping Tests ---
 
     function testLastAmountCappedAtMaxAmount() public {

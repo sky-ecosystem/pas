@@ -110,6 +110,7 @@ contract Configurator {
             );
             require(
                 slope <= defSlope ||
+                slope <= current.slope || // avoid overflow for an hypothetical case where current slope is type(uint256).max
                 slope <= current.slope * maxChange / WAD,
                 "Configurator/exceeds-max-slope"
             );
