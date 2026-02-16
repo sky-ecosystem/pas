@@ -316,6 +316,15 @@ contract BeamStateTest is DssTest {
         assertEq(beamState.maxChange(TARGET1), WAD, "maxChange should be WAD");
     }
 
+    function testSetMaxChangeZero() public {
+        beamState.setMaxChange(TARGET1, 2 * WAD);
+        assertEq(beamState.maxChange(TARGET1), 2 * WAD, "maxChange should be set");
+
+        // Setting to 0 clears the specific override
+        beamState.setMaxChange(TARGET1, 0);
+        assertEq(beamState.maxChange(TARGET1), 0, "maxChange should be cleared");
+    }
+
     function testSetMaxChangeBelowWad() public {
         vm.expectRevert("BeamState/maxChange-below-1x");
         beamState.setMaxChange(TARGET1, WAD - 1);

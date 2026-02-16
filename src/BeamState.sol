@@ -178,7 +178,7 @@ contract BeamState {
     }
 
     function setMaxChange(address rateLimits_, uint256 value) external roleAuth {
-        require(value >= WAD, "BeamState/maxChange-below-1x");
+        require(value == 0 || value >= WAD, "BeamState/maxChange-below-1x");
         maxChange[rateLimits_] = value;
         emit SetMaxChange(rateLimits_, value);
     }

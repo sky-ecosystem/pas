@@ -141,6 +141,8 @@ library PASInit {
         address[] memory rateLimits,
         address[] memory controllers
     ) internal {
+        require(hop > 0, "PASInit/hop-is-zero");
+
         BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
 
         beamState.setHop(address(0), hop);
