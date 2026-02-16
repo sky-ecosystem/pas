@@ -392,11 +392,11 @@ contract ConfiguratorTest is DssTest {
     function testSetRateLimitNoOverflowWhenCurrentMaxAmountIsMax() public {
         bytes32 key = keccak256("overflow-key");
         _setupCBeam(address(target1), CBEAM1);
-        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 10 * WAD);
+        _setupDefaultRateLimits(key, address(target1), 500 * WAD, 10 * WAD);
         // Current maxAmount is type(uint256).max — would overflow in `current.maxAmount * maxChange / WAD`
         _setupRateLimitData(target1, key, type(uint256).max, 10 * WAD, type(uint256).max, block.timestamp);
 
-        // Decrease to within defaults — should not overflow
+        // Decrease to finite value above defaults — should not overflow
         vm.prank(CBEAM1);
         configurator.setRateLimit(address(target1), key, 1_000 * WAD, 10 * WAD);
 
