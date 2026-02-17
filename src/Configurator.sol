@@ -102,15 +102,17 @@ contract Configurator {
             uint256 maxChange = beamState.getMaxChange(rateLimits);
 
             // Ceiling is the max of (current * maxChange) and default
+            // Avoids overflow when current maxAmount is type(uint256).max and guarantees decreases are always possible even when maxChange is 0
             require(
                 maxAmount <= defMaxAmount ||
-                maxAmount <= current.maxAmount || // avoid overflow when current maxAmount is type(uint256).max
+                maxAmount <= current.maxAmount ||
                 maxAmount <= current.maxAmount * maxChange / WAD,
                 "Configurator/exceeds-max-amount"
             );
+            // Avoids overflow for a hypothetical case where current slope is type(uint256).max
             require(
                 slope <= defSlope ||
-                slope <= current.slope || // avoid overflow for an hypothetical case where current slope is type(uint256).max
+                slope <= current.slope ||
                 slope <= current.slope * maxChange / WAD,
                 "Configurator/exceeds-max-slope"
             );
