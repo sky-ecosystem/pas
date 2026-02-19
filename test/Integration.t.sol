@@ -255,6 +255,16 @@ contract IntegrationTest is DssTest {
         assertEq(freshBeamState.controllers(testControllers[1]), 1, "second controller should be added");
     }
 
+    function initExtras() external {
+        PASInstance memory freshPas = PASDeploy.deploy(address(this), address(this), MIN_DELAY);
+        PASInit.initExtras(freshPas, 0, 1.5 ether, new address[](0), new address[](0), new address[](0));
+    }
+
+    function testInitExtrasRevertsWhenHopIsZero() public {
+        vm.expectRevert("PASInit/hop-is-zero");
+        this.initExtras();
+    }
+
     // ============================================================================
     // CoreCouncil Direct Actions (IMMEDIATE Role) Tests
     // ============================================================================

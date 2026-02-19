@@ -84,10 +84,6 @@ contract Configurator {
 
     // --- Internal functions ---
 
-    function _max(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        z = x > y ? x : y;
-    }
-
     function _min(uint256 x, uint256 y) internal pure returns (uint256 z) {
         z = x < y ? x : y;
     }
@@ -97,6 +93,7 @@ contract Configurator {
     function setRateLimit(address rateLimits, bytes32 key, uint256 maxAmount, uint256 slope) external notStopped authRateLimits(rateLimits) {
         (uint256 defMaxAmount, uint256 defSlope) = beamState.getInitRateLimits(key, rateLimits);
         if (defMaxAmount == type(uint256).max && defSlope == 0) {
+            // If maximal rate limits are defined in beamState the cBEAM has to use those
             require(maxAmount == type(uint256).max && slope == 0, "Configurator/unlimited-incorrect-params");
             RateLimitsLike(rateLimits).setUnlimitedRateLimitData(key);
             emit SetRateLimit(rateLimits, key, type(uint256).max, 0);
@@ -105,8 +102,20 @@ contract Configurator {
             uint256 maxChange = beamState.getMaxChange(rateLimits);
 
             // Ceiling is the max of (current * maxChange) and default
-            require(maxAmount <= _max(current.maxAmount * maxChange / WAD, defMaxAmount), "Configurator/exceeds-max-amount");
-            require(slope <= _max(current.slope * maxChange / WAD, defSlope), "Configurator/exceeds-max-slope");
+            // Avoids overflow when current maxAmount is type(uint256).max and guarantees decreases are always possible even when maxChange is 0
+            require(
+                maxAmount <= defMaxAmount ||
+                maxAmount <= current.maxAmount ||
+                maxAmount <= current.maxAmount * maxChange / WAD,
+                "Configurator/exceeds-max-amount"
+            );
+            // Avoids overflow for a hypothetical case where current slope is type(uint256).max
+            require(
+                slope <= defSlope ||
+                slope <= current.slope ||
+                slope <= current.slope * maxChange / WAD,
+                "Configurator/exceeds-max-slope"
+            );
 
             // Any increase requires hop
             if (maxAmount > current.maxAmount || slope > current.slope) {
