@@ -1,4 +1,4 @@
-# PAS - Permissioned Action System
+# PAS - Parallelized Allocation System
 
 PAS is a governance framework for managing rate-limited operations through authorized actors called cBeams. It provides timelocked proposal execution, configurable rate limits, and role-based access control for interacting with external controllers.
 
