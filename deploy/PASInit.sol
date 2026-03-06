@@ -67,6 +67,18 @@ interface PASMomLike {
     function setAuthority(address) external;
 }
 
+struct InitRateLimitConfig {
+    bytes32 key;
+    address rateLimits;
+    uint256 maxAmount;
+    uint256 slope;
+}
+
+struct InitControllerActionConfig {
+    bytes   data;
+    address controller;
+}
+
 library PASInit {
 
     // It is noted that delayed and immediate operations order is non deterministic.
@@ -155,6 +167,29 @@ library PASInit {
         }
         for(uint256 i; i < controllers.length; i++) {
             beamState.addController(controllers[i]);
+        }
+    }
+
+    function initLimitsAndControllerData(
+        PASInstance                  memory pasInstance,
+        InitRateLimitConfig[]        memory rateLimitConfigs,
+        InitControllerActionConfig[] memory controllerActionConfigs
+    ) internal {
+        BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
+
+        for (uint256 i; i < rateLimitConfigs.length; i++) {
+            beamState.addInitRateLimits(
+                rateLimitConfigs[i].key,
+                rateLimitConfigs[i].rateLimits,
+                rateLimitConfigs[i].maxAmount,
+                rateLimitConfigs[i].slope
+            );
+        }
+        for (uint256 i; i < controllerActionConfigs.length; i++) {
+            beamState.addInitControllerActions(
+                controllerActionConfigs[i].data,
+                controllerActionConfigs[i].controller
+            );
         }
     }
 
