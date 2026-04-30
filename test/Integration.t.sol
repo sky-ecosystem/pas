@@ -20,7 +20,7 @@ import "dss-test/DssTest.sol";
 import { MCD, DssInstance } from "dss-test/MCD.sol";
 import { PASInstance } from "deploy/PASInstance.sol";
 import { PASDeploy } from "deploy/PASDeploy.sol";
-import { PASInit, InitRateLimitConfig, InitControllerActionConfig } from "deploy/PASInit.sol";
+import { PASInit, InitRateLimitConfig, InitControllerActionConfig, InitCBeamConfig } from "deploy/PASInit.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator, RateLimitsLike } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
@@ -234,17 +234,28 @@ contract IntegrationTest is DssTest {
         testControllers[0] = SPARK_CONTROLLER;
         testControllers[1] = address(0x22);
 
+        // cBeam[0] is paired with both rateLimits and both controllers; cBeam[1] gets only the second rateLimits
+        InitCBeamConfig[] memory cBeamConfigs = new InitCBeamConfig[](2);
+        cBeamConfigs[0] = InitCBeamConfig({
+            cBeam:       testCBeams[0],
+            rateLimits:  testRateLimits,
+            controllers: testControllers
+        });
+        address[] memory cBeam1RateLimits = new address[](1);
+        cBeam1RateLimits[0] = testRateLimits[1];
+        cBeamConfigs[1] = InitCBeamConfig({
+            cBeam:       testCBeams[1],
+            rateLimits:  cBeam1RateLimits,
+            controllers: new address[](0)
+        });
+
         vm.startPrank(pauseProxy);
-        PASInit.initExtras(freshPas, hop, maxChange, testCBeams, testRateLimits, testControllers);
+        PASInit.initExtras(freshPas, hop, maxChange, testRateLimits, testControllers, cBeamConfigs);
         vm.stopPrank();
 
         // Verify default hop and maxChange are set
         assertEq(freshBeamState.getHop(address(0)), hop, "default hop should be set");
         assertEq(freshBeamState.getMaxChange(address(0)), maxChange, "default maxChange should be set");
-
-        // Verify cBeams are added
-        assertEq(freshBeamState.cBeams(testCBeams[0]), 1, "first cBeam should be added");
-        assertEq(freshBeamState.cBeams(testCBeams[1]), 1, "second cBeam should be added");
 
         // Verify rateLimits are added
         assertEq(freshBeamState.rateLimits(testRateLimits[0]), 1, "first rateLimits should be added");
@@ -253,11 +264,25 @@ contract IntegrationTest is DssTest {
         // Verify controllers are added
         assertEq(freshBeamState.controllers(testControllers[0]), 1, "first controller should be added");
         assertEq(freshBeamState.controllers(testControllers[1]), 1, "second controller should be added");
+
+        // Verify cBeams are added
+        assertEq(freshBeamState.cBeams(testCBeams[0]), 1, "first cBeam should be added");
+        assertEq(freshBeamState.cBeams(testCBeams[1]), 1, "second cBeam should be added");
+
+        // Verify cBeam pairings
+        assertEq(freshBeamState.rateLimitsCBeams(testRateLimits[0], testCBeams[0]), 1, "cBeam0<->rateLimits0 paired");
+        assertEq(freshBeamState.rateLimitsCBeams(testRateLimits[1], testCBeams[0]), 1, "cBeam0<->rateLimits1 paired");
+        assertEq(freshBeamState.controllersCBeams(testControllers[0], testCBeams[0]), 1, "cBeam0<->controller0 paired");
+        assertEq(freshBeamState.controllersCBeams(testControllers[1], testCBeams[0]), 1, "cBeam0<->controller1 paired");
+        assertEq(freshBeamState.rateLimitsCBeams(testRateLimits[0], testCBeams[1]), 0, "cBeam1<->rateLimits0 not paired");
+        assertEq(freshBeamState.rateLimitsCBeams(testRateLimits[1], testCBeams[1]), 1, "cBeam1<->rateLimits1 paired");
+        assertEq(freshBeamState.controllersCBeams(testControllers[0], testCBeams[1]), 0, "cBeam1<->controller0 not paired");
+        assertEq(freshBeamState.controllersCBeams(testControllers[1], testCBeams[1]), 0, "cBeam1<->controller1 not paired");
     }
 
     function initExtras() external {
         PASInstance memory freshPas = PASDeploy.deploy(address(this), address(this), MIN_DELAY);
-        PASInit.initExtras(freshPas, 0, 1.5 ether, new address[](0), new address[](0), new address[](0));
+        PASInit.initExtras(freshPas, 0, 1.5 ether, new address[](0), new address[](0), new InitCBeamConfig[](0));
     }
 
     function testInitExtrasRevertsWhenHopIsZero() public {
