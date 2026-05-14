@@ -55,12 +55,6 @@ interface TimelockLike {
     function grantRole(bytes32, address) external;
 }
 
-interface TimelockWrapperLike {
-    function timelock() external view returns (address);
-    function beamState() external view returns (address);
-    function kiss(address) external;
-}
-
 interface PASMomLike {
     function beamState() external view returns (address);
     function timelock() external view returns (address);
@@ -197,25 +191,5 @@ library PASInit {
         // --- Chainlog ---
 
         dss.chainlog.setAddress(key, address(mom));
-    }
-
-    function initTimelockWrapper(
-        PASInstance memory pasInstance,
-        address timelockWrapper_,
-        address coreCouncil
-    ) internal {
-        TimelockLike        timelock        = TimelockLike(pasInstance.timelock);
-        TimelockWrapperLike timelockWrapper = TimelockWrapperLike(timelockWrapper_);
-
-        // --- Sanity checks ---
-
-        require(timelockWrapper.timelock()  == pasInstance.timelock,  "PASInit/wrapper-timelock-mismatch");
-        require(timelockWrapper.beamState() == pasInstance.beamState, "PASInit/wrapper-beamState-mismatch");
-
-        // --- Set permissions ---
-
-        // Grant the coreCouncil as the proposer through the wrapper
-        timelock.grantRole(timelock.PROPOSER_ROLE(), address(timelockWrapper));
-        timelockWrapper.kiss(coreCouncil);
     }
 }

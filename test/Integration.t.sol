@@ -24,19 +24,21 @@ import { PASInit } from "deploy/PASInit.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator, RateLimitsLike } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
-import { TimelockWrapperMainnet, RateLimitConfig } from "src/timelock/TimelockWrapperMainnet.sol";
+import {
+    TimelockCalldataGenerator,
+    RateLimitConfig,
+    ILayerZeroFacet
+} from "src/timelock/TimelockCalldataGenerator.sol";
 import { PASMom } from "src/PASMom.sol";
+import { MockFacetController } from "./mocks/MockFacetController.sol";
 
 interface ChiefLike {
     function hat() external view returns (address);
 }
 
-// Interface for SparkController
+// Minimal Spark controller view used only to fetch the live rate-limiter address.
 interface ControllerLike {
     function rateLimits() external view returns (address);
-    function setMintRecipient(uint32 domain, bytes32 mintRecipient) external;
-    function mintRecipients(uint32 domain) external view returns (bytes32);
-    function grantRole(bytes32 role, address account) external;
 }
 
 // Extended RateLimitsLike with role management
@@ -57,7 +59,7 @@ interface RateLimitsWithRolesLike {
 
 contract IntegrationTest is DssTest {
 
-    // Mainnet addresses
+    // Mainnet addresses (used only for the real rate-limiter integration)
     address constant SPARK_CONTROLLER = 0xE52d643B27601D4d2BAB2052f30cf936ed413cec;
     address constant SPARK_PROXY      = 0x3300f198988e4C9C63F75dF86De36421f06af8c4;
     address constant CHAINLOG         = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
@@ -66,14 +68,17 @@ contract IntegrationTest is DssTest {
     // Fetched from controller
     address SPARK_RATE_LIMITS;
 
-    DssInstance            dss;
-    PASInstance            pas;
-    BeamState              beamState;
-    Configurator           configurator;
-    Timelock               timelock;
-    TimelockWrapperMainnet wrapper;
-    PASMom                 mom;
-    ChiefLike              chief;
+    DssInstance               dss;
+    PASInstance               pas;
+    BeamState                 beamState;
+    Configurator              configurator;
+    Timelock                  timelock;
+    TimelockCalldataGenerator generator;
+    PASMom                    mom;
+    ChiefLike                 chief;
+
+    // Mock diamond-pau controller used by facet-driven flows
+    MockFacetController       controller;
 
     address pauseProxy;   // Timelock admin
     address coreCouncil;  // Has IMMEDIATE role on BeamState, proposer/canceller on Timelock
@@ -91,7 +96,7 @@ contract IntegrationTest is DssTest {
         // Load DssInstance from chainlog
         dss = MCD.loadFromChainlog(CHAINLOG);
 
-        // Fetch SPARK_RATE_LIMITS from controller
+        // Fetch SPARK_RATE_LIMITS from controller (kept for real rate-limiter integration)
         SPARK_RATE_LIMITS = ControllerLike(SPARK_CONTROLLER).rateLimits();
 
         pauseProxy = dss.chainlog.getAddress("MCD_PAUSE_PROXY");
@@ -107,9 +112,12 @@ contract IntegrationTest is DssTest {
         beamState    = BeamState(pas.beamState);
         configurator = Configurator(pas.configurator);
         timelock     = Timelock(payable(pas.timelock));
-        // Deploy Mom and TimelockWrapper separately
-        mom     = PASMom(PASDeploy.deployMom(pauseProxy, pas.beamState, pas.timelock));
-        wrapper = TimelockWrapperMainnet(PASDeploy.deployTimelockWrapperMainnet(address(this), pauseProxy, pas.timelock, pas.beamState));
+        // Deploy Mom and TimelockCalldataGenerator separately
+        mom       = PASMom(PASDeploy.deployMom(pauseProxy, pas.beamState, pas.timelock));
+        generator = TimelockCalldataGenerator(PASDeploy.deployTimelockCalldataGenerator(pas.timelock, pas.beamState));
+
+        // Mock controller stands in for the future diamond-pau deployment
+        controller = new MockFacetController();
 
         chief = ChiefLike(dss.chainlog.getAddress("MCD_ADM"));
 
@@ -124,8 +132,25 @@ contract IntegrationTest is DssTest {
         PASInit.init(pas, MIN_DELAY, coreCouncil, cancellers, pausers);
         PASInit.addCoreToChainlog(dss, pas, "PAS_STATE", "PAS_CONFIGURATOR", "PAS_TIMELOCK");
         PASInit.initMom(dss, pas, address(mom), "PAS_MOM");
-        PASInit.initTimelockWrapper(pas, address(wrapper), coreCouncil);
         vm.stopPrank();
+    }
+
+    // ============================================================================
+    // Helpers
+    // ============================================================================
+
+    // Submits generator-built calldata to the Timelock as coreCouncil (the proposer)
+    // via a low-level call, and returns the id of the just-scheduled operation.
+    function _scheduleWithGeneratorData(bytes memory data) internal returns (bytes32 id) {
+        vm.prank(coreCouncil);
+        (bool success, bytes memory ret) = address(timelock).call(data);
+        if (!success) {
+            if (ret.length > 0) {
+                assembly { revert(add(32, ret), mload(ret)) }
+            }
+            revert("schedule-via-generator-failed");
+        }
+        id = timelock.getLastOperationId();
     }
 
     // ============================================================================
@@ -137,7 +162,7 @@ contract IntegrationTest is DssTest {
         assertTrue(pas.configurator != address(0), "configurator should be deployed");
         assertTrue(pas.timelock != address(0), "timelock should be deployed");
         assertTrue(address(mom) != address(0), "mom should be deployed");
-        assertTrue(address(wrapper) != address(0), "wrapper should be deployed");
+        assertTrue(address(generator) != address(0), "generator should be deployed");
     }
 
     function testConfiguratorLinkedToBeamState() public view {
@@ -150,9 +175,9 @@ contract IntegrationTest is DssTest {
         assertEq(mom.owner(), pauseProxy, "mom should be owned by pauseProxy");
     }
 
-    function testTimelockWrapperLinkedCorrectly() public view {
-        assertEq(address(wrapper.timelock()), address(timelock), "wrapper should reference timelock");
-        assertEq(address(wrapper.beamState()), address(beamState), "wrapper should reference beamState");
+    function testTimelockCalldataGeneratorLinkedCorrectly() public view {
+        assertEq(address(generator.timelock()), address(timelock), "generator should reference timelock");
+        assertEq(address(generator.beamState()), address(beamState), "generator should reference beamState");
     }
 
     function testChainlogEntriesAfterInit() public view {
@@ -193,14 +218,9 @@ contract IntegrationTest is DssTest {
         assertTrue(beamState.hasUserRole(coreCouncil, uint8(PASInit.Role.IMMEDIATE)), "coreCouncil should have IMMEDIATE role");
     }
 
-    function testTimelockWrapperBudsAfterInit() public view {
-        assertEq(wrapper.buds(coreCouncil), 1, "coreCouncil should be whitelisted on wrapper");
-    }
-
     function testTimelockRolesAfterInit() public view {
         assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), pauseProxy), "pauseProxy should be admin");
         assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should be proposer");
-        assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), address(wrapper)), "wrapper should be proposer");
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), coreCouncil), "coreCouncil should be canceller");
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), canceller), "canceller should be canceller");
         assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), pauser), "pauser should be pauser");
@@ -231,7 +251,7 @@ contract IntegrationTest is DssTest {
         testRateLimits[1] = address(0x21);
 
         address[] memory testControllers = new address[](2);
-        testControllers[0] = SPARK_CONTROLLER;
+        testControllers[0] = address(controller);
         testControllers[1] = address(0x22);
 
         vm.startPrank(pauseProxy);
@@ -294,14 +314,14 @@ contract IntegrationTest is DssTest {
     function testCoreCouncilCanDelController() public {
         // Setup: pauseProxy adds controller
         vm.prank(pauseProxy);
-        beamState.addController(SPARK_CONTROLLER);
-        assertEq(beamState.controllers(SPARK_CONTROLLER), 1, "controller should be added");
+        beamState.addController(address(controller));
+        assertEq(beamState.controllers(address(controller)), 1, "controller should be added");
 
         // CoreCouncil can delete (role 2)
         vm.prank(coreCouncil);
-        beamState.delController(SPARK_CONTROLLER);
+        beamState.delController(address(controller));
 
-        assertEq(beamState.controllers(SPARK_CONTROLLER), 0, "controller should be deleted");
+        assertEq(beamState.controllers(address(controller)), 0, "controller should be deleted");
     }
 
     function testCoreCouncilCanDelCBeam() public {
@@ -336,19 +356,19 @@ contract IntegrationTest is DssTest {
     function testCoreCouncilCanSetAndUnsetCBeamForController() public {
         // Setup: pauseProxy adds controller and cBeam, then sets association
         vm.startPrank(pauseProxy);
-        beamState.addController(SPARK_CONTROLLER);
+        beamState.addController(address(controller));
         beamState.addCBeam(cBeam);
         vm.stopPrank();
 
         vm.prank(coreCouncil);
-        beamState.setCBeamForController(SPARK_CONTROLLER, cBeam);
-        assertEq(beamState.controllersCBeams(SPARK_CONTROLLER, cBeam), 1, "cBeam should be set");
+        beamState.setCBeamForController(address(controller), cBeam);
+        assertEq(beamState.controllersCBeams(address(controller), cBeam), 1, "cBeam should be set");
 
         // CoreCouncil can unset association (role 2)
         vm.prank(coreCouncil);
-        beamState.unsetCBeamForController(SPARK_CONTROLLER, cBeam);
+        beamState.unsetCBeamForController(address(controller), cBeam);
 
-        assertEq(beamState.controllersCBeams(SPARK_CONTROLLER, cBeam), 0, "cBeam should be unset for controller");
+        assertEq(beamState.controllersCBeams(address(controller), cBeam), 0, "cBeam should be unset for controller");
     }
 
     function testCoreCouncilCanDelInitRateLimits() public {
@@ -375,14 +395,14 @@ contract IntegrationTest is DssTest {
 
         // Setup: pauseProxy adds init controller action
         vm.prank(pauseProxy);
-        bytes32 key = beamState.addInitControllerActions(actionData, SPARK_CONTROLLER);
+        bytes32 key = beamState.addInitControllerActions(actionData, address(controller));
 
-        assertTrue(beamState.isControllerActionEnabled(key, SPARK_CONTROLLER), "action should be enabled");
+        assertTrue(beamState.isControllerActionEnabled(key, address(controller)), "action should be enabled");
 
         // CoreCouncil can delete (role 2)
         vm.prank(coreCouncil);
-        beamState.delInitControllerActions(key, SPARK_CONTROLLER);
-        assertFalse(beamState.isControllerActionEnabled(key, SPARK_CONTROLLER), "action should be disabled");
+        beamState.delInitControllerActions(key, address(controller));
+        assertFalse(beamState.isControllerActionEnabled(key, address(controller)), "action should be disabled");
     }
 
     function testNonAuthorizedCannotDoRole2Actions() public {
@@ -495,34 +515,33 @@ contract IntegrationTest is DssTest {
         bytes memory actionData = abi.encodeWithSignature("someAction(uint256)", 42);
 
         _scheduleAndExecute(
-            abi.encodeWithSelector(BeamState.addInitControllerActions.selector, actionData, SPARK_CONTROLLER),
+            abi.encodeWithSelector(BeamState.addInitControllerActions.selector, actionData, address(controller)),
             keccak256("addInitControllerActions")
         );
 
         bytes32 key = keccak256(actionData);
-        assertTrue(beamState.isControllerActionEnabled(key, SPARK_CONTROLLER), "action should be enabled via timelock");
+        assertTrue(beamState.isControllerActionEnabled(key, address(controller)), "action should be enabled via timelock");
     }
 
     // ============================================================================
-    // TimelockWrapperMainnet Tests
+    // TimelockCalldataGenerator Tests
     // ============================================================================
 
-    function testWrapperCanSchedule() public {
+    function testGeneratorCanSchedule() public {
         // First stop via coreCouncil
         vm.prank(coreCouncil);
         beamState.stop();
         assertTrue(beamState.stopped(), "should be stopped");
 
-        // Schedule start via wrapper
-        vm.prank(coreCouncil);
-        bytes32 operationId = wrapper.start(bytes32(0), SALT, MIN_DELAY);
+        // Schedule start via generator-built calldata, submitted directly to timelock by coreCouncil
+        bytes32 operationId = _scheduleWithGeneratorData(generator.start(bytes32(0), SALT, MIN_DELAY));
 
         vm.warp(block.timestamp + MIN_DELAY);
 
         Timelock.Operation memory op = timelock.getOperation(operationId);
         timelock.executeBatch(op.targets, op.values, op.payloads, op.predecessor, op.salt);
 
-        assertFalse(beamState.stopped(), "should be started via wrapper");
+        assertFalse(beamState.stopped(), "should be started via generator-driven schedule");
     }
 
     // ============================================================================
@@ -530,9 +549,8 @@ contract IntegrationTest is DssTest {
     // ============================================================================
 
     function testCoreCouncilCanCancelOperation() public {
-        // Schedule operation
-        vm.prank(coreCouncil);
-        bytes32 operationId = wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        // Schedule operation via generator
+        bytes32 operationId = _scheduleWithGeneratorData(generator.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY));
 
         assertTrue(timelock.isOperationPending(operationId), "operation should be pending");
 
@@ -545,8 +563,7 @@ contract IntegrationTest is DssTest {
     }
 
     function testCancellerCanCancelOperation() public {
-        vm.prank(coreCouncil);
-        bytes32 operationId = wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        bytes32 operationId = _scheduleWithGeneratorData(generator.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY));
 
         vm.prank(canceller);
         timelock.cancel(operationId);
@@ -569,15 +586,15 @@ contract IntegrationTest is DssTest {
         vm.prank(pauser);
         timelock.pause();
 
+        bytes memory data = generator.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
         vm.prank(coreCouncil);
-        vm.expectRevert();
-        wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        (bool success,) = address(timelock).call(data);
+        assertFalse(success, "scheduling should be blocked while timelock is paused");
     }
 
     function testPausedTimelockBlocksExecution() public {
         // Schedule first
-        vm.prank(coreCouncil);
-        bytes32 operationId = wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        bytes32 operationId = _scheduleWithGeneratorData(generator.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY));
 
         vm.warp(block.timestamp + MIN_DELAY);
 
@@ -628,7 +645,7 @@ contract IntegrationTest is DssTest {
         bytes32 id1 = timelock.hashOperationBatch(targets, values, payloads1, bytes32(0), keccak256("op1"));
 
         // Schedule second operation: addController with predecessor
-        bytes memory payload2 = abi.encodeWithSelector(BeamState.addController.selector, SPARK_CONTROLLER);
+        bytes memory payload2 = abi.encodeWithSelector(BeamState.addController.selector, address(controller));
         bytes[] memory payloads2 = new bytes[](1);
         payloads2[0] = payload2;
 
@@ -647,7 +664,7 @@ contract IntegrationTest is DssTest {
 
         // Now execute second
         timelock.executeBatch(targets, values, payloads2, id1, keccak256("op2"));
-        assertEq(beamState.controllers(SPARK_CONTROLLER), 1, "controller should be added");
+        assertEq(beamState.controllers(address(controller)), 1, "controller should be added");
     }
 
     // ============================================================================
@@ -655,17 +672,14 @@ contract IntegrationTest is DssTest {
     // ============================================================================
 
     function testFullOnboardingWorkflow() public {
-        // 1. CoreCouncil schedules adding a cBeam via wrapper
-        vm.prank(coreCouncil);
-        bytes32 addCBeamOp = wrapper.addCBeam(cBeam, bytes32(0), keccak256("step1"), MIN_DELAY);
+        // 1. CoreCouncil schedules adding a cBeam via generator
+        bytes32 addCBeamOp = _scheduleWithGeneratorData(generator.addCBeam(cBeam, bytes32(0), keccak256("step1"), MIN_DELAY));
 
         // 2. Schedule addRateLimits with predecessor
-        vm.prank(coreCouncil);
-        bytes32 addRateLimitsOp = wrapper.addRateLimits(SPARK_RATE_LIMITS, addCBeamOp, keccak256("step2"), MIN_DELAY);
+        bytes32 addRateLimitsOp = _scheduleWithGeneratorData(generator.addRateLimits(SPARK_RATE_LIMITS, addCBeamOp, keccak256("step2"), MIN_DELAY));
 
         // 3. Schedule setHop with predecessor
-        vm.prank(coreCouncil);
-        bytes32 setHopOp = wrapper.setHop(SPARK_RATE_LIMITS, 4 hours, addRateLimitsOp, keccak256("step3"), MIN_DELAY);
+        bytes32 setHopOp = _scheduleWithGeneratorData(generator.setHop(SPARK_RATE_LIMITS, 4 hours, addRateLimitsOp, keccak256("step3"), MIN_DELAY));
 
         // Wait for delay
         vm.warp(block.timestamp + MIN_DELAY);
@@ -694,8 +708,7 @@ contract IntegrationTest is DssTest {
         assertTrue(beamState.stopped(), "system stopped");
 
         // 7. Restart requires timelock
-        vm.prank(coreCouncil);
-        bytes32 startOp = wrapper.start(bytes32(0), keccak256("restart"), MIN_DELAY);
+        bytes32 startOp = _scheduleWithGeneratorData(generator.start(bytes32(0), keccak256("restart"), MIN_DELAY));
 
         vm.warp(block.timestamp + MIN_DELAY);
 
@@ -820,16 +833,16 @@ contract IntegrationTest is DssTest {
         vm.prank(hat);
         mom.pause();
 
-        // Scheduling via wrapper is blocked
+        // Scheduling via generator-built calldata is blocked
+        bytes memory data = generator.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
         vm.prank(coreCouncil);
-        vm.expectRevert();
-        wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        (bool success,) = address(timelock).call(data);
+        assertFalse(success, "scheduling should be blocked while timelock is paused via mom");
     }
 
     function testMomPauseBlocksTimelockExecution() public {
         // Schedule an operation first
-        vm.prank(coreCouncil);
-        bytes32 operationId = wrapper.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY);
+        bytes32 operationId = _scheduleWithGeneratorData(generator.addCBeam(cBeam, bytes32(0), SALT, MIN_DELAY));
 
         vm.warp(block.timestamp + MIN_DELAY);
 
@@ -845,70 +858,51 @@ contract IntegrationTest is DssTest {
     }
 
     // ============================================================================
-    // Post-Onboarding cBeam Operations Test with Real Contracts
+    // Post-Onboarding cBeam Operations Test with Real Rate Limiter + Mock Controller
     // ============================================================================
-
-    function _scheduleDirect(bytes memory payload, bytes32 predecessor, bytes32 salt) internal returns (bytes32) {
-        address[] memory targets = new address[](1);
-        targets[0] = address(beamState);
-        uint256[] memory values = new uint256[](1);
-        bytes[] memory payloads = new bytes[](1);
-        payloads[0] = payload;
-
-        vm.prank(coreCouncil);
-        timelock.scheduleBatch(targets, values, payloads, predecessor, salt, MIN_DELAY);
-
-        return timelock.hashOperationBatch(targets, values, payloads, predecessor, salt);
-    }
 
     function testCBeamCanOperateAfterOnboarding() public {
         bytes32 rateLimitKey = keccak256("integration-test-key");
 
-        // Controller action: setMintRecipient for domain 6
-        address testRecipient = address(0xDEADBEEF);
-        bytes memory setMintRecipientAction = abi.encodeWithSelector(
-            ControllerLike.setMintRecipient.selector,
-            uint32(6),  // domain
-            bytes32(uint256(uint160(testRecipient)))
+        // Facet controller action: layerZero_setRecipient for endpoint id 6
+        uint32 endpointId = 6;
+        bytes32 lzRecipient = bytes32(uint256(uint160(makeAddr("lz-recipient"))));
+        bytes memory layerZeroAction = abi.encodeCall(
+            ILayerZeroFacet.setRecipient,
+            (endpointId, lzRecipient)
         );
 
         // ========================================
-        // Phase 1: Onboard via Timelock (Role 1)
+        // Phase 1: Onboard via Timelock (Role 1) using the generator
         // ========================================
         bytes32[] memory opIds = new bytes32[](7);
         {
             // 1a. Schedule addCBeam
-            vm.prank(coreCouncil);
-            opIds[0] = wrapper.addCBeam(cBeam, bytes32(0), keccak256("addCBeam"), MIN_DELAY);
+            opIds[0] = _scheduleWithGeneratorData(generator.addCBeam(cBeam, bytes32(0), keccak256("addCBeam"), MIN_DELAY));
 
             // 1b. Schedule addRateLimits for SPARK_RATE_LIMITS
-            vm.prank(coreCouncil);
-            opIds[1] = wrapper.addRateLimits(SPARK_RATE_LIMITS, opIds[0], keccak256("addRateLimits"), MIN_DELAY);
+            opIds[1] = _scheduleWithGeneratorData(generator.addRateLimits(SPARK_RATE_LIMITS, opIds[0], keccak256("addRateLimits"), MIN_DELAY));
 
-            // 1c. Schedule addController for SPARK_CONTROLLER
-            vm.prank(coreCouncil);
-            opIds[2] = wrapper.addController(SPARK_CONTROLLER, opIds[1], keccak256("addController"), MIN_DELAY);
+            // 1c. Schedule addController for the mock controller
+            opIds[2] = _scheduleWithGeneratorData(generator.addController(address(controller), opIds[1], keccak256("addController"), MIN_DELAY));
 
             // 1d. Schedule setHop for rateLimits
-            vm.prank(coreCouncil);
-            opIds[3] = wrapper.setHop(SPARK_RATE_LIMITS, 1 hours, opIds[2], keccak256("setHop"), MIN_DELAY);
+            opIds[3] = _scheduleWithGeneratorData(generator.setHop(SPARK_RATE_LIMITS, 1 hours, opIds[2], keccak256("setHop"), MIN_DELAY));
 
             // 1e. Schedule setMaxChange for rateLimits
-            vm.prank(coreCouncil);
-            opIds[4] = wrapper.setMaxChange(SPARK_RATE_LIMITS, 2 ether, opIds[3], keccak256("setMaxChange"), MIN_DELAY);
+            opIds[4] = _scheduleWithGeneratorData(generator.setMaxChange(SPARK_RATE_LIMITS, 2 ether, opIds[3], keccak256("setMaxChange"), MIN_DELAY));
 
-            // 1f. Schedule addInitRateLimits (via wrapper with RateLimitConfig)
-            vm.prank(coreCouncil);
-            opIds[5] = wrapper.addInitRateLimits(
+            // 1f. Schedule addInitRateLimits (via generator with RateLimitConfig)
+            opIds[5] = _scheduleWithGeneratorData(generator.addInitRateLimits(
                 RateLimitConfig({key: rateLimitKey, rateLimits: SPARK_RATE_LIMITS, maxAmount: 1_000_000e18, slope: 100_000e18}),
                 opIds[4], keccak256("addInitRateLimits"), MIN_DELAY
-            );
+            ));
 
-            // 1g. Schedule addInitControllerActions (directly via timelock - no wrapper for generic actions)
-            opIds[6] = _scheduleDirect(
-                abi.encodeWithSelector(BeamState.addInitControllerActions.selector, setMintRecipientAction, SPARK_CONTROLLER),
-                opIds[5], keccak256("addInitControllerActions")
-            );
+            // 1g. Schedule a facet controller action via the generator (diamond-pau LayerZeroFacet.setRecipient)
+            opIds[6] = _scheduleWithGeneratorData(generator.layerZero_setRecipient(
+                endpointId, lzRecipient, address(controller),
+                opIds[5], keccak256("layerZero_setRecipient"), MIN_DELAY
+            ));
         }
 
         // Wait for delay
@@ -923,7 +917,7 @@ contract IntegrationTest is DssTest {
         // Verify onboarding results
         assertEq(beamState.cBeams(cBeam), 1, "cBeam should be added");
         assertEq(beamState.rateLimits(SPARK_RATE_LIMITS), 1, "rateLimits should be added");
-        assertEq(beamState.controllers(SPARK_CONTROLLER), 1, "controller should be added");
+        assertEq(beamState.controllers(address(controller)), 1, "controller should be added");
         assertEq(beamState.getHop(SPARK_RATE_LIMITS), 1 hours, "hop should be set");
         assertEq(beamState.getMaxChange(SPARK_RATE_LIMITS), 2 ether, "maxChange should be set");
         {
@@ -931,32 +925,28 @@ contract IntegrationTest is DssTest {
             assertEq(limits.maxAmount, 1_000_000e18, "init rate limit maxAmount should be set");
             assertEq(limits.slope, 100_000e18, "init rate limit slope should be set");
         }
-        assertTrue(beamState.isControllerActionEnabled(keccak256(setMintRecipientAction), SPARK_CONTROLLER), "controller action should be enabled");
+        assertTrue(beamState.isControllerActionEnabled(keccak256(layerZeroAction), address(controller)), "controller action should be enabled");
 
         // ========================================
-        // Phase 2: Grant admin role to configurator and associate cBeam (Role 2 - direct)
+        // Phase 2: Grant admin role to configurator on the real rate limiter and associate cBeam (Role 2 - direct)
         // ========================================
 
-        // Grant OZ_DEFAULT_ADMIN_ROLE to configurator on both controller and rate limits
-        // This allows configurator to call functions on these contracts
-        vm.startPrank(SPARK_PROXY);
-        ControllerLike(SPARK_CONTROLLER).grantRole(OZ_DEFAULT_ADMIN_ROLE, address(configurator));
+        vm.prank(SPARK_PROXY);
         RateLimitsWithRolesLike(SPARK_RATE_LIMITS).grantRole(OZ_DEFAULT_ADMIN_ROLE, address(configurator));
-        vm.stopPrank();
 
         vm.startPrank(coreCouncil);
         beamState.setCBeamForRateLimits(SPARK_RATE_LIMITS, cBeam);
-        beamState.setCBeamForController(SPARK_CONTROLLER, cBeam);
+        beamState.setCBeamForController(address(controller), cBeam);
         vm.stopPrank();
 
         assertEq(beamState.rateLimitsCBeams(SPARK_RATE_LIMITS, cBeam), 1, "cBeam should be associated with rateLimits");
-        assertEq(beamState.controllersCBeams(SPARK_CONTROLLER, cBeam), 1, "cBeam should be associated with controller");
+        assertEq(beamState.controllersCBeams(address(controller), cBeam), 1, "cBeam should be associated with controller");
 
         // ========================================
         // Phase 3: cBeam operates via Configurator
         // ========================================
 
-        // 3a. cBeam sets rate limit
+        // 3a. cBeam sets rate limit on the real rate limiter
         vm.prank(cBeam);
         configurator.setRateLimit(SPARK_RATE_LIMITS, rateLimitKey, 500_000e18, 50_000e18);
         {
@@ -965,13 +955,10 @@ contract IntegrationTest is DssTest {
             assertEq(data.slope, 50_000e18, "rate limit slope should be set by cBeam on real contract");
         }
 
-        // 3b. cBeam calls controller action
+        // 3b. cBeam calls the whitelisted facet action on the mock controller
         vm.prank(cBeam);
-        configurator.callControllerAction(SPARK_CONTROLLER, setMintRecipientAction);
-
-        // Verify
-        bytes32 expectedRecipient = bytes32(uint256(uint160(testRecipient)));
-        assertEq(ControllerLike(SPARK_CONTROLLER).mintRecipients(6), expectedRecipient, "mintRecipient should be set on real controller");
+        configurator.callControllerAction(address(controller), layerZeroAction);
+        assertEq(controller.layerZeroRecipients(endpointId), lzRecipient, "lz recipient should be set on mock controller");
 
         // ========================================
         // Phase 4: Verify restrictions
@@ -986,17 +973,16 @@ contract IntegrationTest is DssTest {
         // 4b. Unauthorized cBeam cannot call controller action
         vm.prank(unauthorizedCBeam);
         vm.expectRevert("Configurator/not-authorized-controller-cBeam");
-        configurator.callControllerAction(SPARK_CONTROLLER, setMintRecipientAction);
+        configurator.callControllerAction(address(controller), layerZeroAction);
 
-        // 4c. cBeam cannot call non-whitelisted action
-        bytes memory nonWhitelistedAction = abi.encodeWithSelector(
-            ControllerLike.setMintRecipient.selector,
-            uint32(7),  // different domain
-            bytes32(uint256(uint160(testRecipient)))
+        // 4c. cBeam cannot call a non-whitelisted action (different endpoint id → different keccak)
+        bytes memory nonWhitelistedAction = abi.encodeCall(
+            ILayerZeroFacet.setRecipient,
+            (uint32(7), lzRecipient)
         );
         vm.prank(cBeam);
         vm.expectRevert("Configurator/not-valid-data");
-        configurator.callControllerAction(SPARK_CONTROLLER, nonWhitelistedAction);
+        configurator.callControllerAction(address(controller), nonWhitelistedAction);
 
         // 4d. Operations blocked when stopped
         vm.prank(coreCouncil);
@@ -1008,11 +994,10 @@ contract IntegrationTest is DssTest {
 
         vm.prank(cBeam);
         vm.expectRevert("Configurator/stopped");
-        configurator.callControllerAction(SPARK_CONTROLLER, setMintRecipientAction);
+        configurator.callControllerAction(address(controller), layerZeroAction);
 
         // 4e. Operations resume after restart (via timelock)
-        vm.prank(coreCouncil);
-        bytes32 startOp = wrapper.start(bytes32(0), keccak256("restart"), MIN_DELAY);
+        bytes32 startOp = _scheduleWithGeneratorData(generator.start(bytes32(0), keccak256("restart"), MIN_DELAY));
 
         vm.warp(block.timestamp + MIN_DELAY);
         {
@@ -1022,7 +1007,7 @@ contract IntegrationTest is DssTest {
 
         assertFalse(beamState.stopped(), "system should be running");
 
-        // cBeam can operate again on real contracts
+        // cBeam can operate again on the real rate limiter
         vm.prank(cBeam);
         configurator.setRateLimit(SPARK_RATE_LIMITS, rateLimitKey, 400_000e18, 40_000e18);
         {
