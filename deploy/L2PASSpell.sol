@@ -27,13 +27,11 @@ contract L2PASSpell {
     address public immutable beamState;
     address public immutable configurator;
     address public immutable timelock;
-    address public immutable wrapper;
 
-    constructor(address beamState_, address configurator_, address timelock_, address wrapper_) {
+    constructor(address beamState_, address configurator_, address timelock_) {
         beamState    = beamState_;
         configurator = configurator_;
         timelock     = timelock_;
-        wrapper      = wrapper_;
     }
 
     function init(
@@ -49,6 +47,5 @@ contract L2PASSpell {
         });
 
         PASInit.init(pas, minDelay, coreCouncil, cancellers, pausers);
-        PASInit.initTimelockWrapper(pas, wrapper, coreCouncil);
     }
 }
