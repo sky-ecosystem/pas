@@ -67,6 +67,24 @@ interface PASMomLike {
     function setAuthority(address) external;
 }
 
+struct InitCBeamConfig {
+    address   cBeam;
+    address[] rateLimits;
+    address[] controllers;
+}
+
+struct InitRateLimitConfig {
+    bytes32 key;
+    address rateLimits;
+    uint256 maxAmount;
+    uint256 slope;
+}
+
+struct InitControllerActionConfig {
+    bytes   data;
+    address controller;
+}
+
 library PASInit {
 
     // It is noted that delayed and immediate operations order is non deterministic.
@@ -137,9 +155,9 @@ library PASInit {
         PASInstance memory pasInstance,
         uint256 hop,
         uint256 maxChange,
-        address[] memory cBeams,
         address[] memory rateLimits,
-        address[] memory controllers
+        address[] memory controllers,
+        InitCBeamConfig[] memory cBeamConfigs
     ) internal {
         require(hop > 0, "PASInit/hop-is-zero");
 
@@ -147,14 +165,44 @@ library PASInit {
 
         beamState.setHop(address(0), hop);
         beamState.setMaxChange(address(0), maxChange);
-        for(uint256 i; i < cBeams.length; i++) {
-            beamState.addCBeam(cBeams[i]);
-        }
         for(uint256 i; i < rateLimits.length; i++) {
             beamState.addRateLimits(rateLimits[i]);
         }
         for(uint256 i; i < controllers.length; i++) {
             beamState.addController(controllers[i]);
+        }
+        for(uint256 i; i < cBeamConfigs.length; i++) {
+            InitCBeamConfig memory c = cBeamConfigs[i];
+            beamState.addCBeam(c.cBeam);
+            for(uint256 j; j < c.rateLimits.length; j++) {
+                beamState.setCBeamForRateLimits(c.rateLimits[j], c.cBeam);
+            }
+            for(uint256 j; j < c.controllers.length; j++) {
+                beamState.setCBeamForController(c.controllers[j], c.cBeam);
+            }
+        }
+    }
+
+    function initLimitsAndControllerData(
+        PASInstance                  memory pasInstance,
+        InitRateLimitConfig[]        memory rateLimitConfigs,
+        InitControllerActionConfig[] memory controllerActionConfigs
+    ) internal {
+        BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
+
+        for (uint256 i; i < rateLimitConfigs.length; i++) {
+            beamState.addInitRateLimits(
+                rateLimitConfigs[i].key,
+                rateLimitConfigs[i].rateLimits,
+                rateLimitConfigs[i].maxAmount,
+                rateLimitConfigs[i].slope
+            );
+        }
+        for (uint256 i; i < controllerActionConfigs.length; i++) {
+            beamState.addInitControllerActions(
+                controllerActionConfigs[i].data,
+                controllerActionConfigs[i].controller
+            );
         }
     }
 

@@ -20,7 +20,7 @@ import "dss-test/DssTest.sol";
 import { MCD, DssInstance } from "dss-test/MCD.sol";
 import { PASInstance } from "deploy/PASInstance.sol";
 import { PASDeploy } from "deploy/PASDeploy.sol";
-import { PASInit } from "deploy/PASInit.sol";
+import { PASInit, InitRateLimitConfig, InitControllerActionConfig, InitCBeamConfig } from "deploy/PASInit.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator, RateLimitsLike } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
@@ -234,17 +234,28 @@ contract IntegrationTest is DssTest {
         testControllers[0] = SPARK_CONTROLLER;
         testControllers[1] = address(0x22);
 
+        // cBeam[0] is paired with both rateLimits and both controllers; cBeam[1] gets only the second rateLimits
+        InitCBeamConfig[] memory cBeamConfigs = new InitCBeamConfig[](2);
+        cBeamConfigs[0] = InitCBeamConfig({
+            cBeam:       testCBeams[0],
+            rateLimits:  testRateLimits,
+            controllers: testControllers
+        });
+        address[] memory cBeam1RateLimits = new address[](1);
+        cBeam1RateLimits[0] = testRateLimits[1];
+        cBeamConfigs[1] = InitCBeamConfig({
+            cBeam:       testCBeams[1],
+            rateLimits:  cBeam1RateLimits,
+            controllers: new address[](0)
+        });
+
         vm.startPrank(pauseProxy);
-        PASInit.initExtras(freshPas, hop, maxChange, testCBeams, testRateLimits, testControllers);
+        PASInit.initExtras(freshPas, hop, maxChange, testRateLimits, testControllers, cBeamConfigs);
         vm.stopPrank();
 
         // Verify default hop and maxChange are set
         assertEq(freshBeamState.getHop(address(0)), hop, "default hop should be set");
         assertEq(freshBeamState.getMaxChange(address(0)), maxChange, "default maxChange should be set");
-
-        // Verify cBeams are added
-        assertEq(freshBeamState.cBeams(testCBeams[0]), 1, "first cBeam should be added");
-        assertEq(freshBeamState.cBeams(testCBeams[1]), 1, "second cBeam should be added");
 
         // Verify rateLimits are added
         assertEq(freshBeamState.rateLimits(testRateLimits[0]), 1, "first rateLimits should be added");
@@ -253,16 +264,75 @@ contract IntegrationTest is DssTest {
         // Verify controllers are added
         assertEq(freshBeamState.controllers(testControllers[0]), 1, "first controller should be added");
         assertEq(freshBeamState.controllers(testControllers[1]), 1, "second controller should be added");
+
+        // Verify cBeams are added
+        assertEq(freshBeamState.cBeams(testCBeams[0]), 1, "first cBeam should be added");
+        assertEq(freshBeamState.cBeams(testCBeams[1]), 1, "second cBeam should be added");
+
+        // Verify cBeam pairings
+        assertEq(freshBeamState.rateLimitsCBeams(testRateLimits[0], testCBeams[0]), 1, "cBeam0<->rateLimits0 paired");
+        assertEq(freshBeamState.rateLimitsCBeams(testRateLimits[1], testCBeams[0]), 1, "cBeam0<->rateLimits1 paired");
+        assertEq(freshBeamState.controllersCBeams(testControllers[0], testCBeams[0]), 1, "cBeam0<->controller0 paired");
+        assertEq(freshBeamState.controllersCBeams(testControllers[1], testCBeams[0]), 1, "cBeam0<->controller1 paired");
+        assertEq(freshBeamState.rateLimitsCBeams(testRateLimits[0], testCBeams[1]), 0, "cBeam1<->rateLimits0 not paired");
+        assertEq(freshBeamState.rateLimitsCBeams(testRateLimits[1], testCBeams[1]), 1, "cBeam1<->rateLimits1 paired");
+        assertEq(freshBeamState.controllersCBeams(testControllers[0], testCBeams[1]), 0, "cBeam1<->controller0 not paired");
+        assertEq(freshBeamState.controllersCBeams(testControllers[1], testCBeams[1]), 0, "cBeam1<->controller1 not paired");
     }
 
     function initExtras() external {
         PASInstance memory freshPas = PASDeploy.deploy(address(this), address(this), MIN_DELAY);
-        PASInit.initExtras(freshPas, 0, 1.5 ether, new address[](0), new address[](0), new address[](0));
+        PASInit.initExtras(freshPas, 0, 1.5 ether, new address[](0), new address[](0), new InitCBeamConfig[](0));
     }
 
     function testInitExtrasRevertsWhenHopIsZero() public {
         vm.expectRevert("PASInit/hop-is-zero");
         this.initExtras();
+    }
+
+    function testInitLimitsAndControllerData() public {
+        PASInstance memory freshPas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
+
+        // Setup rate limit configs
+        InitRateLimitConfig[] memory rlConfigs = new InitRateLimitConfig[](2);
+        rlConfigs[0] = InitRateLimitConfig({
+            key:        bytes32(0),
+            rateLimits: SPARK_RATE_LIMITS,
+            maxAmount:  1_000_000 ether,
+            slope:      100 ether
+        });
+        rlConfigs[1] = InitRateLimitConfig({
+            key:        bytes32(uint256(1)),
+            rateLimits: address(0x42),
+            maxAmount:  500_000 ether,
+            slope:      50 ether
+        });
+
+        // Setup controller action configs
+        bytes memory actionData1 = abi.encodeWithSelector(bytes4(0xdeadbeef), uint256(123));
+        bytes memory actionData2 = abi.encodeWithSelector(bytes4(0xcafebabe), address(0x99));
+        InitControllerActionConfig[] memory caConfigs = new InitControllerActionConfig[](2);
+        caConfigs[0] = InitControllerActionConfig({data: actionData1, controller: SPARK_CONTROLLER});
+        caConfigs[1] = InitControllerActionConfig({data: actionData2, controller: address(0)});
+
+        BeamState freshBeamState = BeamState(freshPas.beamState);
+
+        vm.startPrank(pauseProxy);
+        PASInit.initLimitsAndControllerData(freshPas, rlConfigs, caConfigs);
+        vm.stopPrank();
+
+        // Verify init rate limits
+        (uint256 maxAmount0, uint256 slope0) = freshBeamState.initRateLimits(bytes32(0), SPARK_RATE_LIMITS);
+        assertEq(maxAmount0, 1_000_000 ether, "first rate limit maxAmount");
+        assertEq(slope0, 100 ether, "first rate limit slope");
+
+        (uint256 maxAmount1, uint256 slope1) = freshBeamState.initRateLimits(bytes32(uint256(1)), address(0x42));
+        assertEq(maxAmount1, 500_000 ether, "second rate limit maxAmount");
+        assertEq(slope1, 50 ether, "second rate limit slope");
+
+        // Verify init controller actions
+        assertEq(freshBeamState.initControllerActions(keccak256(actionData1), SPARK_CONTROLLER), 1, "first controller action");
+        assertEq(freshBeamState.initControllerActions(keccak256(actionData2), address(0)), 1, "second controller action");
     }
 
     // ============================================================================
@@ -873,6 +943,32 @@ contract IntegrationTest is DssTest {
         );
 
         // ========================================
+        // Phase 0: Init some defaults via spell (PASInit.initLimitsAndControllerData)
+        // ========================================
+        bytes32 spellRateLimitKey = keccak256("spell-init-key");
+        bytes memory spellControllerAction = abi.encodeWithSelector(
+            ControllerLike.setMintRecipient.selector,
+            uint32(7),  // different domain than the timelock-onboarded action
+            bytes32(uint256(uint160(testRecipient)))
+        );
+        {
+            InitRateLimitConfig[] memory rlConfigs = new InitRateLimitConfig[](1);
+            rlConfigs[0] = InitRateLimitConfig({
+                key:        spellRateLimitKey,
+                rateLimits: SPARK_RATE_LIMITS,
+                maxAmount:  2_000_000e18,
+                slope:      200_000e18
+            });
+
+            InitControllerActionConfig[] memory caConfigs = new InitControllerActionConfig[](1);
+            caConfigs[0] = InitControllerActionConfig({data: spellControllerAction, controller: SPARK_CONTROLLER});
+
+            vm.startPrank(pauseProxy);
+            PASInit.initLimitsAndControllerData(pas, rlConfigs, caConfigs);
+            vm.stopPrank();
+        }
+
+        // ========================================
         // Phase 1: Onboard via Timelock (Role 1)
         // ========================================
         bytes32[] memory opIds = new bytes32[](7);
@@ -932,6 +1028,13 @@ contract IntegrationTest is DssTest {
             assertEq(limits.slope, 100_000e18, "init rate limit slope should be set");
         }
         assertTrue(beamState.isControllerActionEnabled(keccak256(setMintRecipientAction), SPARK_CONTROLLER), "controller action should be enabled");
+        // Verify spell-configured defaults
+        {
+            BeamState.DefaultRateLimits memory spellLimits = beamState.getInitRateLimits(spellRateLimitKey, SPARK_RATE_LIMITS);
+            assertEq(spellLimits.maxAmount, 2_000_000e18, "spell init rate limit maxAmount should be set");
+            assertEq(spellLimits.slope, 200_000e18, "spell init rate limit slope should be set");
+        }
+        assertTrue(beamState.isControllerActionEnabled(keccak256(spellControllerAction), SPARK_CONTROLLER), "spell controller action should be enabled");
 
         // ========================================
         // Phase 2: Grant admin role to configurator and associate cBeam (Role 2 - direct)
@@ -973,6 +1076,20 @@ contract IntegrationTest is DssTest {
         bytes32 expectedRecipient = bytes32(uint256(uint160(testRecipient)));
         assertEq(ControllerLike(SPARK_CONTROLLER).mintRecipients(6), expectedRecipient, "mintRecipient should be set on real controller");
 
+        // 3c. cBeam sets rate limit using spell-configured defaults
+        vm.prank(cBeam);
+        configurator.setRateLimit(SPARK_RATE_LIMITS, spellRateLimitKey, 1_500_000e18, 150_000e18);
+        {
+            RateLimitsLike.RateLimitData memory data = RateLimitsLike(SPARK_RATE_LIMITS).getRateLimitData(spellRateLimitKey);
+            assertEq(data.maxAmount, 1_500_000e18, "spell rate limit maxAmount should be set by cBeam on real contract");
+            assertEq(data.slope, 150_000e18, "spell rate limit slope should be set by cBeam on real contract");
+        }
+
+        // 3d. cBeam calls spell-configured controller action
+        vm.prank(cBeam);
+        configurator.callControllerAction(SPARK_CONTROLLER, spellControllerAction);
+        assertEq(ControllerLike(SPARK_CONTROLLER).mintRecipients(7), expectedRecipient, "spell mintRecipient should be set on real controller");
+
         // ========================================
         // Phase 4: Verify restrictions
         // ========================================
@@ -991,7 +1108,7 @@ contract IntegrationTest is DssTest {
         // 4c. cBeam cannot call non-whitelisted action
         bytes memory nonWhitelistedAction = abi.encodeWithSelector(
             ControllerLike.setMintRecipient.selector,
-            uint32(7),  // different domain
+            uint32(8),  // domain not whitelisted by either timelock or spell
             bytes32(uint256(uint160(testRecipient)))
         );
         vm.prank(cBeam);
