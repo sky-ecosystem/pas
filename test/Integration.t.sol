@@ -65,13 +65,13 @@ contract IntegrationTest is DssTest {
     // Fetched from controller
     address SPARK_RATE_LIMITS;
 
-    DssInstance            dss;
-    PASInstance            pas;
-    BeamState              beamState;
-    Configurator           configurator;
-    Timelock               timelock;
-    PASMom                 mom;
-    ChiefLike              chief;
+    DssInstance  dss;
+    PASInstance  pas;
+    BeamState    beamState;
+    Configurator configurator;
+    Timelock     timelock;
+    PASMom       mom;
+    ChiefLike    chief;
 
     address pauseProxy;   // Timelock admin
     address coreCouncil;  // Has IMMEDIATE role on BeamState, proposer/canceller on Timelock
@@ -106,7 +106,7 @@ contract IntegrationTest is DssTest {
         configurator = Configurator(pas.configurator);
         timelock     = Timelock(payable(pas.timelock));
         // Deploy Mom separately
-        mom     = PASMom(PASDeploy.deployMom(pauseProxy, pas.beamState, pas.timelock));
+        mom = PASMom(PASDeploy.deployMom(pauseProxy, pas.beamState, pas.timelock));
 
         chief = ChiefLike(dss.chainlog.getAddress("MCD_ADM"));
 
