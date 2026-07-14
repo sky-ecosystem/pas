@@ -53,6 +53,8 @@ interface TimelockLike {
     function CANCELLER_ROLE() external view returns (bytes32);
     function PAUSER_ROLE() external view returns (bytes32);
     function grantRole(bytes32, address) external;
+    function revokeRole(bytes32, address) external;
+    function pause() external;
 }
 
 interface PASMomLike {
@@ -143,6 +145,18 @@ library PASInit {
         for (uint256 i = 0; i < pausers.length; ++i) {
             timelock.grantRole(timelock.PAUSER_ROLE(), pausers[i]);
         }
+    }
+
+    // Call aftier `init` for starting with spells-only configurations of `DELAYED` actions
+    function pauseTimelock(
+        address timelock_,
+        address admin
+    ) internal {
+        TimelockLike timelock = TimelockLike(timelock_);
+
+        timelock.grantRole(timelock.PAUSER_ROLE(), admin);
+        timelock.pause();
+        timelock.revokeRole(timelock.PAUSER_ROLE(), admin);
     }
 
     function initExtras(
