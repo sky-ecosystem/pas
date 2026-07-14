@@ -35,10 +35,13 @@ contract L2PASSpell {
     }
 
     function init(
-        uint256          minDelay,
-        address          coreCouncil,
-        address[] memory cancellers,
-        address[] memory pausers
+        bool             doInit,       // configure BeamState + coreCouncil (IMMEDIATE path)
+        bool             doTimelock,   // configure/activate the Timelock (DELAYED path)
+        address          coreCouncil,  // used by both: IMMEDIATE role (`doInit`) + proposer/canceller (`doTimelock`)
+        uint256          minDelay,     // only used when `doTimelock`
+        address[] memory cancellers,   // only used when `doTimelock`
+        address[] memory pausers,      // only used when `doTimelock`
+        bool             startPaused   // only used when `doTimelock`
     ) external {
         PASInstance memory pas = PASInstance({
             beamState:    beamState,
@@ -46,6 +49,7 @@ contract L2PASSpell {
             timelock:     timelock
         });
 
-        PASInit.init(pas, minDelay, coreCouncil, cancellers, pausers);
+        if (doInit)     PASInit.init(pas, coreCouncil);
+        if (doTimelock) PASInit.initTimelock(pas, minDelay, coreCouncil, cancellers, pausers, address(this), startPaused);
     }
 }

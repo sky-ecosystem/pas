@@ -53,6 +53,8 @@ interface TimelockLike {
     function CANCELLER_ROLE() external view returns (bytes32);
     function PAUSER_ROLE() external view returns (bytes32);
     function grantRole(bytes32, address) external;
+    function revokeRole(bytes32, address) external;
+    function pause() external;
 }
 
 interface PASMomLike {
@@ -91,31 +93,19 @@ library PASInit {
 
     function init(
         PASInstance memory pasInstance,
-        uint256            minDelay,
-        address            coreCouncil,
-        address[]   memory cancellers,
-        address[]   memory pausers
+        address            coreCouncil
     ) internal {
         BeamStateLike    beamState    = BeamStateLike(pasInstance.beamState);
         ConfiguratorLike configurator = ConfiguratorLike(pasInstance.configurator);
-        TimelockLike     timelock     = TimelockLike(pasInstance.timelock);
 
         // --- Sanity checks ---
 
         require(configurator.beamState() == address(beamState), "PASInit/configurator-beamState-mismatch");
-        require(timelock.getMinDelay()   == minDelay,           "PASInit/timelock-minDelay-mismatch");
 
         // --- Configure BeamState ---
 
-        // Define Beam actions that are accessed through timelock (DELAYED) and directly (IMMEDIATE)
-        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.start.selector,                    true);
-        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.setHop.selector,                   true);
-        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.setMaxChange.selector,             true);
-        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addRateLimits.selector,            true);
-        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addController.selector,            true);
-        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addCBeam.selector,                 true);
-        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addInitRateLimits.selector,        true);
-        beamState.setRoleAction(uint8(Role.DELAYED),   BeamStateLike.addInitControllerActions.selector, true);
+        // Define Beam actions that are accessed directly (IMMEDIATE).
+        // DELAYED actions (accessed through the Timelock) are configured in `initTimelock`.
         beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.stop.selector,                     true);
         beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.delRateLimits.selector,            true);
         beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.delController.selector,            true);
@@ -127,9 +117,40 @@ library PASInit {
         beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.delInitRateLimits.selector,        true);
         beamState.setRoleAction(uint8(Role.IMMEDIATE), BeamStateLike.delInitControllerActions.selector, true);
 
-        // Set timelock as the user with DELAYED role and coreCouncil with IMMEDIATE role
-        beamState.setUserRole(address(timelock), uint8(Role.DELAYED),   true);
-        beamState.setUserRole(coreCouncil,       uint8(Role.IMMEDIATE), true);
+        // Set coreCouncil with IMMEDIATE role
+        beamState.setUserRole(coreCouncil, uint8(Role.IMMEDIATE), true);
+    }
+
+    function initTimelock(
+        PASInstance memory pasInstance,
+        uint256            minDelay,
+        address            coreCouncil,
+        address[]   memory cancellers,
+        address[]   memory pausers,
+        address            admin,
+        bool               startPaused
+    ) internal {
+        BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
+        TimelockLike  timelock  = TimelockLike(pasInstance.timelock);
+
+        // --- Sanity checks ---
+
+        require(timelock.getMinDelay() == minDelay, "PASInit/timelock-minDelay-mismatch");
+
+        // --- Configure BeamState ---
+
+        // Define Beam actions that are accessed through the Timelock (DELAYED)
+        beamState.setRoleAction(uint8(Role.DELAYED), BeamStateLike.start.selector,                    true);
+        beamState.setRoleAction(uint8(Role.DELAYED), BeamStateLike.setHop.selector,                   true);
+        beamState.setRoleAction(uint8(Role.DELAYED), BeamStateLike.setMaxChange.selector,             true);
+        beamState.setRoleAction(uint8(Role.DELAYED), BeamStateLike.addRateLimits.selector,            true);
+        beamState.setRoleAction(uint8(Role.DELAYED), BeamStateLike.addController.selector,            true);
+        beamState.setRoleAction(uint8(Role.DELAYED), BeamStateLike.addCBeam.selector,                 true);
+        beamState.setRoleAction(uint8(Role.DELAYED), BeamStateLike.addInitRateLimits.selector,        true);
+        beamState.setRoleAction(uint8(Role.DELAYED), BeamStateLike.addInitControllerActions.selector, true);
+
+        // Set timelock as the user with DELAYED role
+        beamState.setUserRole(address(timelock), uint8(Role.DELAYED), true);
 
         // --- Configure Timelock ---
 
@@ -142,6 +163,12 @@ library PASInit {
         }
         for (uint256 i = 0; i < pausers.length; ++i) {
             timelock.grantRole(timelock.PAUSER_ROLE(), pausers[i]);
+        }
+
+        if (startPaused) {
+            timelock.grantRole(timelock.PAUSER_ROLE(), admin);
+            timelock.pause();
+            timelock.revokeRole(timelock.PAUSER_ROLE(), admin);
         }
     }
 
@@ -207,9 +234,9 @@ library PASInit {
         bytes32 configuratorKey,
         bytes32 timelockKey
     ) internal {
-        dss.chainlog.setAddress(stateKey,        pasInstance.beamState);
-        dss.chainlog.setAddress(configuratorKey, pasInstance.configurator);
-        dss.chainlog.setAddress(timelockKey,     pasInstance.timelock);
+        if (stateKey        != bytes32(0)) dss.chainlog.setAddress(stateKey,        pasInstance.beamState);
+        if (configuratorKey != bytes32(0)) dss.chainlog.setAddress(configuratorKey, pasInstance.configurator);
+        if (timelockKey     != bytes32(0)) dss.chainlog.setAddress(timelockKey,     pasInstance.timelock);
     }
 
     function initMom(

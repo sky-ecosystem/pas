@@ -118,7 +118,8 @@ contract IntegrationTest is DssTest {
         pausers[0] = pauser;
 
         vm.startPrank(pauseProxy);
-        PASInit.init(pas, MIN_DELAY, coreCouncil, cancellers, pausers);
+        PASInit.init(pas, coreCouncil);
+        PASInit.initTimelock(pas, MIN_DELAY, coreCouncil, cancellers, pausers, pauseProxy, false);
         PASInit.addCoreToChainlog(dss, pas, "PAS_STATE", "PAS_CONFIGURATOR", "PAS_TIMELOCK");
         PASInit.initMom(dss, pas, address(mom), "PAS_MOM");
         vm.stopPrank();
@@ -150,6 +151,23 @@ contract IntegrationTest is DssTest {
         assertEq(dss.chainlog.getAddress("PAS_CONFIGURATOR"), address(configurator), "PAS_CONFIGURATOR should be set in chainlog");
         assertEq(dss.chainlog.getAddress("PAS_TIMELOCK"), address(timelock), "PAS_TIMELOCK should be set in chainlog");
         assertEq(dss.chainlog.getAddress("PAS_MOM"), address(mom), "PAS_MOM should be set in chainlog");
+    }
+
+    // A chainlog key left empty (bytes32(0)) is skipped, so the Timelock can be omitted until it
+    // is configured/activated via initTimelock.
+    function testAddCoreToChainlogSkipsEmptyKeys() public {
+        PASInstance memory freshPas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
+
+        uint256 countBefore = dss.chainlog.count();
+
+        vm.startPrank(pauseProxy);
+        PASInit.addCoreToChainlog(dss, freshPas, "PAS_STATE_TEST", "PAS_CONFIGURATOR_TEST", bytes32(0));
+        vm.stopPrank();
+
+        // Only the two non-empty keys were added; the empty timelock key was skipped.
+        assertEq(dss.chainlog.count(), countBefore + 2, "only state and configurator should be added");
+        assertEq(dss.chainlog.getAddress("PAS_STATE_TEST"), freshPas.beamState, "state key should be set");
+        assertEq(dss.chainlog.getAddress("PAS_CONFIGURATOR_TEST"), freshPas.configurator, "configurator key should be set");
     }
 
     function testBeamStateActionsConfigured() public view {
@@ -196,6 +214,95 @@ contract IntegrationTest is DssTest {
         assertEq(mom.owner(), pauseProxy, "mom owner should be pauseProxy");
         assertEq(mom.authority(), address(chief), "mom authority should be MCD_ADM");
         assertEq(beamState.wards(address(mom)), 1, "mom should have wards on beamState");
+    }
+
+    // ============================================================================
+    // Split init / initTimelock Tests
+    // ============================================================================
+
+    // With only `init` run (no `initTimelock`), the Timelock is deployed but not operational:
+    // it is not a DELAYED user on BeamState, nobody holds PROPOSER_ROLE, and the DELAYED actions
+    // are unassigned. Governance's IMMEDIATE path (and Mom) still work.
+    function testTimelockNonOperationalUntilInitTimelock() public {
+        PASInstance memory freshPas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
+        BeamState freshBeamState = BeamState(freshPas.beamState);
+        Timelock  freshTimelock  = Timelock(payable(freshPas.timelock));
+
+        vm.startPrank(pauseProxy);
+        PASInit.init(freshPas, coreCouncil);
+        vm.stopPrank();
+
+        // Timelock is unconfigured
+        assertFalse(freshBeamState.hasUserRole(address(freshTimelock), uint8(PASInit.Role.DELAYED)), "timelock should not have DELAYED role yet");
+        assertFalse(freshTimelock.hasRole(freshTimelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should not be proposer yet");
+        assertFalse(freshBeamState.isActionInRole(BeamState.start.selector, uint8(PASInit.Role.DELAYED)), "start should not be DELAYED yet");
+
+        // Nothing can be scheduled (no proposer)
+        address[] memory targets = new address[](1);
+        targets[0] = address(freshBeamState);
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory payloads = new bytes[](1);
+        payloads[0] = abi.encodeWithSelector(BeamState.addCBeam.selector, cBeam);
+        vm.prank(coreCouncil);
+        vm.expectRevert();
+        freshTimelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
+
+        // IMMEDIATE governance still works
+        vm.prank(coreCouncil);
+        freshBeamState.stop();
+        assertTrue(freshBeamState.stopped(), "coreCouncil should still be able to stop");
+
+        // Wire the Timelock (go live, not paused)
+        vm.startPrank(pauseProxy);
+        PASInit.initTimelock(freshPas, MIN_DELAY, coreCouncil, new address[](0), new address[](0), pauseProxy, false);
+        vm.stopPrank();
+
+        assertTrue(freshBeamState.hasUserRole(address(freshTimelock), uint8(PASInit.Role.DELAYED)), "timelock should now have DELAYED role");
+        assertTrue(freshTimelock.hasRole(freshTimelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should now be proposer");
+        assertFalse(freshTimelock.paused(), "timelock should not be paused");
+
+        // Scheduling now works
+        vm.prank(coreCouncil);
+        freshTimelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
+        bytes32 opId = freshTimelock.hashOperationBatch(targets, values, payloads, bytes32(0), SALT);
+        assertTrue(freshTimelock.isOperationPending(opId), "operation should be scheduled after initTimelock");
+    }
+
+    // With `startPaused = true`, the Timelock is fully configured (proposer set) but frozen until
+    // the admin unpauses. The admin does not retain PAUSER_ROLE (granted then revoked).
+    function testInitTimelockStartPaused() public {
+        PASInstance memory freshPas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
+        BeamState freshBeamState = BeamState(freshPas.beamState);
+        Timelock  freshTimelock  = Timelock(payable(freshPas.timelock));
+
+        vm.startPrank(pauseProxy);
+        PASInit.init(freshPas, coreCouncil);
+        PASInit.initTimelock(freshPas, MIN_DELAY, coreCouncil, new address[](0), new address[](0), pauseProxy, true);
+        vm.stopPrank();
+
+        assertTrue(freshTimelock.paused(), "timelock should start paused");
+        assertFalse(freshTimelock.hasRole(freshTimelock.PAUSER_ROLE(), pauseProxy), "admin should not retain PAUSER_ROLE");
+        assertTrue(freshTimelock.hasRole(freshTimelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should be configured as proposer");
+
+        // Configured but frozen: scheduling blocked while paused
+        address[] memory targets = new address[](1);
+        targets[0] = address(freshBeamState);
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory payloads = new bytes[](1);
+        payloads[0] = abi.encodeWithSelector(BeamState.addCBeam.selector, cBeam);
+        vm.prank(coreCouncil);
+        vm.expectRevert();
+        freshTimelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
+
+        // Admin unpauses -> operational
+        vm.prank(pauseProxy);
+        freshTimelock.unpause();
+        assertFalse(freshTimelock.paused(), "timelock should be unpaused");
+
+        vm.prank(coreCouncil);
+        freshTimelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
+        bytes32 opId = freshTimelock.hashOperationBatch(targets, values, payloads, bytes32(0), SALT);
+        assertTrue(freshTimelock.isOperationPending(opId), "operation should schedule after unpause");
     }
 
     function testInitExtras() public {
