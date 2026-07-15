@@ -147,7 +147,7 @@ library PASInit {
         }
     }
 
-    // Call aftier `init` for starting with spells-only configurations of `DELAYED` actions
+    // Call after `init` for starting with spell-only configurations of `DELAYED` actions
     function pauseTimelock(
         address timelock_,
         address admin

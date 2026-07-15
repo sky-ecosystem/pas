@@ -198,31 +198,25 @@ contract IntegrationTest is DssTest {
         assertEq(beamState.wards(address(mom)), 1, "mom should have wards on beamState");
     }
 
-    // The default setUp does not call setPaused, so the timelock is operational.
-    function testTimelockNotPausedByDefault() public view {
-        assertFalse(timelock.paused(), "timelock should not be paused by default");
-    }
 
-    // PASInit.pauseTimelock right after init brings the system up fully configured but paused: scheduling
-    // is blocked until unpaused, and the admin does not retain PAUSER_ROLE (granted then revoked).
-    // Timelock.unpause() then resumes it.
     function testPauseThenUnpauseTimelock() public {
         PASInstance memory freshPas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
-        BeamState freshBeamState = BeamState(freshPas.beamState);
-        Timelock  freshTimelock  = Timelock(payable(freshPas.timelock));
+        Timelock freshTimelock = Timelock(payable(freshPas.timelock));
 
         vm.startPrank(pauseProxy);
         PASInit.init(freshPas, MIN_DELAY, coreCouncil, new address[](0), new address[](0));
+        // init alone does not pause the timelock
+        assertFalse(freshTimelock.paused(), "timelock should not be paused by init alone");
         PASInit.pauseTimelock(freshPas.timelock, pauseProxy);
         vm.stopPrank();
 
-        assertTrue(freshTimelock.paused(), "timelock should be paused after setPaused(true)");
+        assertTrue(freshTimelock.paused(), "timelock should be paused after pauseTimelock");
         assertFalse(freshTimelock.hasRole(freshTimelock.PAUSER_ROLE(), pauseProxy), "admin should not retain PAUSER_ROLE");
         assertTrue(freshTimelock.hasRole(freshTimelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should still be configured as proposer");
 
         // Configured but frozen: scheduling blocked while paused
         address[] memory targets = new address[](1);
-        targets[0] = address(freshBeamState);
+        targets[0] = freshPas.beamState;
         uint256[] memory values = new uint256[](1);
         bytes[] memory payloads = new bytes[](1);
         payloads[0] = abi.encodeWithSelector(BeamState.addCBeam.selector, cBeam);
