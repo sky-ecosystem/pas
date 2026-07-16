@@ -20,12 +20,12 @@ import "dss-test/DssTest.sol";
 
 import { PASAuthorizeInPAU } from "deploy/PASAuthorizeInPAU.sol";
 
-import { AccessControlEnumerable } from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
-import { IAccessControl }          from "@openzeppelin/contracts/access/IAccessControl.sol";
+import { AccessControl }  from "@openzeppelin/contracts/access/AccessControl.sol";
+import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 // Minimal stand-in for a PAU AccessControls / RateLimits contract: both are stock OZ
 // AccessControl to this library, so one mock serves for both roles.
-contract MockAccessControlled is AccessControlEnumerable {
+contract MockAccessControlled is AccessControl {
     constructor(address admin) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
