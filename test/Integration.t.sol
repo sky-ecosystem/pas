@@ -198,6 +198,43 @@ contract IntegrationTest is DssTest {
         assertEq(beamState.wards(address(mom)), 1, "mom should have wards on beamState");
     }
 
+
+    function testPauseThenUnpauseTimelock() public {
+        PASInstance memory freshPas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
+        Timelock freshTimelock = Timelock(payable(freshPas.timelock));
+
+        vm.startPrank(pauseProxy);
+        PASInit.init(freshPas, MIN_DELAY, coreCouncil, new address[](0), new address[](0));
+        // init alone does not pause the timelock
+        assertFalse(freshTimelock.paused(), "timelock should not be paused by init alone");
+        PASInit.pauseTimelock(freshPas.timelock, pauseProxy);
+        vm.stopPrank();
+
+        assertTrue(freshTimelock.paused(), "timelock should be paused after pauseTimelock");
+        assertFalse(freshTimelock.hasRole(freshTimelock.PAUSER_ROLE(), pauseProxy), "admin should not retain PAUSER_ROLE");
+        assertTrue(freshTimelock.hasRole(freshTimelock.PROPOSER_ROLE(), coreCouncil), "coreCouncil should still be configured as proposer");
+
+        // Configured but frozen: scheduling blocked while paused
+        address[] memory targets = new address[](1);
+        targets[0] = freshPas.beamState;
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory payloads = new bytes[](1);
+        payloads[0] = abi.encodeWithSelector(BeamState.addCBeam.selector, cBeam);
+        vm.prank(coreCouncil);
+        vm.expectRevert();
+        freshTimelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
+
+        // unpause() resumes operations (needs only DEFAULT_ADMIN_ROLE, so the admin calls it directly)
+        vm.prank(pauseProxy);
+        freshTimelock.unpause();
+        assertFalse(freshTimelock.paused(), "timelock should be unpaused");
+
+        vm.prank(coreCouncil);
+        freshTimelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
+        bytes32 opId = freshTimelock.hashOperationBatch(targets, values, payloads, bytes32(0), SALT);
+        assertTrue(freshTimelock.isOperationPending(opId), "operation should schedule after unpause");
+    }
+
     function testInitExtras() public {
         // Deploy a fresh PAS instance for this test
         PASInstance memory freshPas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);

@@ -38,7 +38,8 @@ contract L2PASSpell {
         uint256          minDelay,
         address          coreCouncil,
         address[] memory cancellers,
-        address[] memory pausers
+        address[] memory pausers,
+        bool             startPaused
     ) external {
         PASInstance memory pas = PASInstance({
             beamState:    beamState,
@@ -47,5 +48,6 @@ contract L2PASSpell {
         });
 
         PASInit.init(pas, minDelay, coreCouncil, cancellers, pausers);
+        if (startPaused) PASInit.pauseTimelock(timelock, address(this));
     }
 }
