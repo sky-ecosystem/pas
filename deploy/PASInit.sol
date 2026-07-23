@@ -148,6 +148,7 @@ library PASInit {
     }
 
     // Call after `init` for starting with spell-only configurations of `DELAYED` actions
+    // The admin is assumed not to be listed in the pausers array, so we do not mistakenly revoke its role
     function pauseTimelock(
         address timelock_,
         address admin
