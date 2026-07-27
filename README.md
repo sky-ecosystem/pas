@@ -19,3 +19,7 @@ Extended OpenZeppelin TimelockController with pausing support, permissionless ex
 ### PASMom
 
 Emergency governance contract that allows authorized parties to trigger circuit breakers. Can call `stop()` on BeamState to halt Configurator operations and `pause()` on Timelock to block scheduling and execution. Callable by the owner or via the Chief's hat through the authority.
+
+## Unlimited rate limits
+
+Any rate limit meant to stay unlimited must be registered in BeamState as `(max, 0)` (via `addInitRateLimits`). Otherwise the Configurator treats it as a normal bounded limit that a cBeam can lower. This applies both when first enabling the Configurator on an already-active PAU (every existing key meant to be unlimited must be registered) and when later opting into a facet that adds such a key. In both cases stars are expected to make sure to register it as `(max, 0)` (via a core spell or the Timelock, depending on whether it is coordinated through a star spell or the Timelock).
