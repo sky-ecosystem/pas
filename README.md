@@ -22,4 +22,11 @@ Emergency governance contract that allows authorized parties to trigger circuit 
 
 ## Unlimited rate limits
 
-Any rate limit meant to stay unlimited must be registered in BeamState as `(max, 0)` (via `addInitRateLimits`). Otherwise the Configurator treats it as a normal bounded limit that a cBeam can lower. This applies both when first enabling the Configurator on an already-active PAU (every existing key meant to be unlimited must be registered) and when later opting into a facet that adds such a key. In both cases stars are expected to make sure to register it as `(max, 0)` (via a core spell or the Timelock, depending on whether it is coordinated through a star spell or the Timelock).
+A rate limit key is treated as unlimited — the Configurator forces any cBeam call to keep it at `(max, 0)` and rejects any attempt to lower it — in either of these cases:
+
+- It is registered in BeamState as `(max, 0)` (via `addInitRateLimits`), or
+- It is currently `(max, 0)` in RateLimits and has no BeamState default for that key.
+
+The second case protects keys that are already unlimited (e.g. withdrawal keys kept unlimited for security) even when they were never registered: a cBeam cannot silently reset such a key to `0`. This holds both when first enabling the Configurator on an already-active PAU and when later opting into a facet that adds such a key.
+
+To make an existing unlimited key adjustable by a cBeam (e.g. to bound it), a `roleAuth` caller must register a bounded default for it via `addInitRateLimits` (through a star spell or the Timelock, depending on how the action is routed); the key then follows the normal bounded-limit rules.
