@@ -92,13 +92,17 @@ contract Configurator {
    
     function setRateLimit(address rateLimits, bytes32 key, uint256 maxAmount, uint256 slope) external notStopped authRateLimits(rateLimits) {
         (uint256 defMaxAmount, uint256 defSlope) = beamState.getInitRateLimits(key, rateLimits);
-        if (defMaxAmount == type(uint256).max && defSlope == 0) {
-            // If maximal rate limits are defined in beamState the cBEAM has to use those
+        RateLimitsLike.RateLimitData memory current = RateLimitsLike(rateLimits).getRateLimitData(key);
+
+        if (defMaxAmount == type(uint256).max && defSlope == 0 ||
+            current.maxAmount == type(uint256).max && current.slope == 0 && defMaxAmount == 0 && defSlope == 0) {
+            // The key is locked as unlimited — and the cBEAM must keep it at (max, 0) — when it is
+            // either registered as unlimited in BeamState, or currently unlimited in the RateLimits with no
+            // BeamState default for it. This prevents lowering a pre-existing unlimited key.
             require(maxAmount == type(uint256).max && slope == 0, "Configurator/unlimited-incorrect-params");
             RateLimitsLike(rateLimits).setUnlimitedRateLimitData(key);
             emit SetRateLimit(rateLimits, key, type(uint256).max, 0);
         } else {
-            RateLimitsLike.RateLimitData memory current = RateLimitsLike(rateLimits).getRateLimitData(key);
             uint256 maxChange = beamState.getMaxChange(rateLimits);
 
             // Ceiling is the max of (current * maxChange) and default
