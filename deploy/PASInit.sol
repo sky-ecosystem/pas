@@ -55,12 +55,18 @@ interface TimelockLike {
     function grantRole(bytes32, address) external;
     function revokeRole(bytes32, address) external;
     function pause() external;
+    function unpause() external;
 }
 
 interface PASMomLike {
     function beamState() external view returns (address);
     function timelock() external view returns (address);
     function setAuthority(address) external;
+}
+
+interface BeaconLike {
+    function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
+    function grantRole(bytes32, address) external;
 }
 
 struct InitCBeamConfig {
@@ -160,6 +166,19 @@ library PASInit {
         timelock.revokeRole(timelock.PAUSER_ROLE(), admin);
     }
 
+    function unpauseTimelock(
+        address timelock_,
+        address[] memory pausers
+    ) internal {
+        TimelockLike timelock = TimelockLike(timelock_);
+
+        timelock.unpause();
+
+        for (uint256 i = 0; i < pausers.length; ++i) {
+            timelock.grantRole(timelock.PAUSER_ROLE(), pausers[i]);
+        }
+    }
+
     function initExtras(
         PASInstance memory pasInstance,
         uint256 hop,
@@ -254,5 +273,13 @@ library PASInit {
         // --- Chainlog ---
 
         dss.chainlog.setAddress(key, address(mom));
+    }
+
+    function relyTimelockInBeacon(
+        address beacon_,
+        address timelock
+    ) internal {
+        BeaconLike beacon = BeaconLike(beacon_);
+        beacon.grantRole(beacon.DEFAULT_ADMIN_ROLE(), timelock);
     }
 }

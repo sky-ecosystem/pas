@@ -30,6 +30,38 @@ interface ChiefLike {
     function hat() external view returns (address);
 }
 
+// Interface for the PAU Beacon (OZ AccessControl + integration registry)
+interface BeaconLike {
+    struct Wire {
+        bytes4 callSelector;
+        bytes4 delegateSelector;
+    }
+
+    struct Config {
+        address facet;
+        Wire[]  wires;
+    }
+
+    struct Dispatch {
+        address facet;
+        bytes4  delegateSelector;
+    }
+
+    function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
+    function hasRole(bytes32 role, address account) external view returns (bool);
+    function grantRole(bytes32 role, address account) external;
+    function setIntegration(bytes32 id, Config calldata config) external;
+    function getConfig(bytes32 id) external view returns (Config memory);
+    function getDispatch(bytes4 callSelector) external view returns (Dispatch memory);
+}
+
+// Minimal contract standing in as a new facet (the beacon only requires non-empty code)
+contract FacetMock {
+    function pasFacetAction(uint256 value) external pure returns (uint256) {
+        return value;
+    }
+}
+
 // Interface for SparkController
 interface ControllerLike {
     function rateLimits() external view returns (address);
@@ -198,6 +230,74 @@ contract IntegrationTest is DssTest {
         assertEq(beamState.wards(address(mom)), 1, "mom should have wards on beamState");
     }
 
+    function testRelyTimelockInBeacon() public {
+        BeaconLike beacon = BeaconLike(dss.chainlog.getAddress("PAU_BEACON"));
+        bytes32 adminRole = beacon.DEFAULT_ADMIN_ROLE();
+
+        assertFalse(beacon.hasRole(adminRole, address(timelock)), "timelock should not be beacon admin before");
+
+        // Prepare proposal for adding facet to beacon
+        bytes32 integrationId = "PAS_TEST_FACET";
+        address facet         = address(new FacetMock());
+        bytes4  callSelector  = bytes4(keccak256("pasIntegrationTestAction(uint256)"));
+
+        BeaconLike.Wire[] memory wires = new BeaconLike.Wire[](1);
+        wires[0] = BeaconLike.Wire({
+            callSelector:     callSelector,
+            delegateSelector: FacetMock.pasFacetAction.selector
+        });
+        BeaconLike.Config memory config = BeaconLike.Config({ facet: facet, wires: wires });
+
+        assertEq(beacon.getConfig(integrationId).facet, address(0), "integration should not exist yet");
+        assertEq(beacon.getDispatch(callSelector).facet, address(0), "call selector should not be wired yet");
+
+        address[] memory targets  = new address[](1);
+        uint256[] memory values   = new uint256[](1);
+        bytes[]   memory payloads = new bytes[](1);
+        targets[0]  = address(beacon);
+        payloads[0] = abi.encodeCall(BeaconLike.setIntegration, (integrationId, config));
+
+        bytes32 salt = keccak256("add-beacon-facet");
+
+        // The coreCouncil is the timelock proposer
+        vm.prank(coreCouncil);
+        timelock.scheduleBatch(targets, values, payloads, bytes32(0), salt, MIN_DELAY);
+
+        bytes32 opId = timelock.hashOperationBatch(targets, values, payloads, bytes32(0), salt);
+        assertTrue(timelock.isOperationPending(opId), "operation should be pending");
+
+        vm.warp(block.timestamp + MIN_DELAY);
+
+        // The beacon rejects the timelock, and the timelock bubbles the error up
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(timelock),
+            OZ_DEFAULT_ADMIN_ROLE
+        ));
+        timelock.executeBatch(targets, values, payloads, bytes32(0), salt);
+
+        // Now the spell grants the timelock the beacon admin role
+        vm.startPrank(pauseProxy);
+        PASInit.relyTimelockInBeacon(address(beacon), address(timelock));
+        vm.stopPrank();
+
+        assertTrue(beacon.hasRole(adminRole, address(timelock)), "timelock should be beacon admin after");
+
+        timelock.executeBatch(targets, values, payloads, bytes32(0), salt);
+
+        assertTrue(timelock.isOperationDone(opId), "operation should be done");
+
+        // The facet is registered and its selector wired on the beacon
+        BeaconLike.Config memory stored = beacon.getConfig(integrationId);
+        assertEq(stored.facet, facet, "facet should be registered");
+        assertEq(stored.wires.length, 1, "one wire should be registered");
+        assertEq(stored.wires[0].callSelector, callSelector, "call selector should be stored");
+        assertEq(stored.wires[0].delegateSelector, FacetMock.pasFacetAction.selector, "delegate selector should be stored");
+
+        BeaconLike.Dispatch memory dispatch = beacon.getDispatch(callSelector);
+        assertEq(dispatch.facet, facet, "dispatch should point at the new facet");
+        assertEq(dispatch.delegateSelector, FacetMock.pasFacetAction.selector, "dispatch delegate selector should be set");
+    }
 
     function testPauseThenUnpauseTimelock() public {
         PASInstance memory freshPas = PASDeploy.deploy(address(this), pauseProxy, MIN_DELAY);
@@ -225,14 +325,21 @@ contract IntegrationTest is DssTest {
         freshTimelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
 
         // unpause() resumes operations (needs only DEFAULT_ADMIN_ROLE, so the admin calls it directly)
-        vm.prank(pauseProxy);
-        freshTimelock.unpause();
+        address[] memory pausers = new address[](2);
+        pausers[0] = address(0x11);
+        pausers[1] = address(0x22);
+        vm.startPrank(pauseProxy);
+        PASInit.unpauseTimelock(freshPas.timelock, pausers);
+        vm.stopPrank();
         assertFalse(freshTimelock.paused(), "timelock should be unpaused");
 
         vm.prank(coreCouncil);
         freshTimelock.scheduleBatch(targets, values, payloads, bytes32(0), SALT, MIN_DELAY);
         bytes32 opId = freshTimelock.hashOperationBatch(targets, values, payloads, bytes32(0), SALT);
         assertTrue(freshTimelock.isOperationPending(opId), "operation should schedule after unpause");
+
+        assertTrue(freshTimelock.hasRole(freshTimelock.PAUSER_ROLE(), pausers[0]));
+        assertTrue(freshTimelock.hasRole(freshTimelock.PAUSER_ROLE(), pausers[1]));
     }
 
     function testInitExtras() public {
