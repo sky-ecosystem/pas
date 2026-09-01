@@ -49,7 +49,6 @@ interface BeaconLike {
 
     function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
     function hasRole(bytes32 role, address account) external view returns (bool);
-    function grantRole(bytes32 role, address account) external;
     function setIntegration(bytes32 id, Config calldata config) external;
     function getConfig(bytes32 id) external view returns (Config memory);
     function getDispatch(bytes4 callSelector) external view returns (Dispatch memory);
