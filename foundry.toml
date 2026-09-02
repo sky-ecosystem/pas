@@ -2,5 +2,10 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+solc = "0.8.24"
+optimizer = true
+optimizer_runs = 200
+evmVersion = "cancun"
+verbosity = 1
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
