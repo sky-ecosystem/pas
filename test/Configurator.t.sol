@@ -387,6 +387,100 @@ contract ConfiguratorTest is DssTest {
         configurator.setRateLimit(address(target1), key, 1_000 * WAD, 10 * WAD);
     }
 
+    function testRevertLowerWhenCurrentUnlimitedAndUnregistered() public {
+        bytes32 key = keccak256("current-unlimited-key");
+        _setupCBeam(address(target1), CBEAM1);
+        // Key is currently unlimited on-chain but NOT registered in beamState (no defaults)
+        _setupRateLimitData(target1, key, type(uint256).max, 0, type(uint256).max, block.timestamp);
+
+        // cBeam must not be able to lower an existing unlimited key
+        vm.prank(CBEAM1);
+        vm.expectRevert("Configurator/unlimited-incorrect-params");
+        configurator.setRateLimit(address(target1), key, 1_000 * WAD, 10 * WAD);
+    }
+
+    function testSetUnlimitedWhenCurrentUnlimitedAndUnregistered() public {
+        bytes32 key = keccak256("current-unlimited-idempotent-key");
+        _setupCBeam(address(target1), CBEAM1);
+        // Currently unlimited on-chain, not registered in beamState
+        _setupRateLimitData(target1, key, type(uint256).max, 0, type(uint256).max, block.timestamp);
+
+        // Passing unlimited is accepted (the only value allowed while locked)
+        vm.prank(CBEAM1);
+        vm.expectEmit();
+        emit SetRateLimit(address(target1), key, type(uint256).max, 0);
+        configurator.setRateLimit(address(target1), key, type(uint256).max, 0);
+
+        RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
+        assertEq(data.maxAmount, type(uint256).max, "maxAmount should remain unlimited");
+        assertEq(data.slope, 0, "slope should remain 0");
+    }
+
+    function testLowerAllowedWhenCurrentUnlimitedButGeneralDefaultSet() public {
+        bytes32 key = keccak256("current-unlimited-with-general-key");
+        _setupCBeam(address(target1), CBEAM1);
+        // Currently unlimited on-chain
+        _setupRateLimitData(target1, key, type(uint256).max, 0, type(uint256).max, block.timestamp);
+        // A general (address(0)) bounded default exists for this key -> the lock does not apply
+        _setupDefaultRateLimits(key, address(0), 500 * WAD, 5 * WAD);
+
+        // cBeam can lower it (no increase, so no hop needed)
+        vm.prank(CBEAM1);
+        configurator.setRateLimit(address(target1), key, 1_000 * WAD, 0);
+
+        RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
+        assertEq(data.maxAmount, 1_000 * WAD, "maxAmount should be lowered from unlimited");
+        assertEq(data.slope, 0, "slope should be 0");
+    }
+
+    function testLowerAllowedWhenCurrentMaxAmountUnlimitedButSlopeNonZero() public {
+        bytes32 key = keccak256("current-maxamount-only-key");
+        _setupCBeam(address(target1), CBEAM1);
+        // maxAmount is max but slope is non-zero -> not the canonical unlimited encoding, so not locked
+        _setupRateLimitData(target1, key, type(uint256).max, 10 * WAD, type(uint256).max, block.timestamp);
+
+        vm.prank(CBEAM1);
+        configurator.setRateLimit(address(target1), key, 1_000 * WAD, 0);
+
+        RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
+        assertEq(data.maxAmount, 1_000 * WAD, "maxAmount should be lowered");
+        assertEq(data.slope, 0, "slope should be 0");
+    }
+
+    // --- Overflow Protection Tests ---
+
+    function testSetRateLimitNoOverflowWhenCurrentMaxAmountIsMax() public {
+        bytes32 key = keccak256("overflow-key");
+        _setupCBeam(address(target1), CBEAM1);
+        _setupDefaultRateLimits(key, address(target1), 500 * WAD, 10 * WAD);
+        // Current maxAmount is type(uint256).max — would overflow in `current.maxAmount * maxChange / WAD`
+        _setupRateLimitData(target1, key, type(uint256).max, 10 * WAD, type(uint256).max, block.timestamp);
+
+        // Decrease to finite value above defaults — should not overflow
+        vm.prank(CBEAM1);
+        configurator.setRateLimit(address(target1), key, 1_000 * WAD, 10 * WAD);
+
+        RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
+        assertEq(data.maxAmount, 1_000 * WAD, "maxAmount should decrease from type(uint256).max");
+        assertEq(data.slope, 10 * WAD, "slope should be set correctly");
+    }
+
+    function testSetRateLimitNoOverflowWhenCurrentSlopeIsMax() public {
+        bytes32 key = keccak256("overflow-slope-key");
+        _setupCBeam(address(target1), CBEAM1);
+        _setupDefaultRateLimits(key, address(target1), 1_000 * WAD, 500 * WAD);
+        // Current slope is type(uint256).max — would overflow in `current.slope * maxChange / WAD`
+        _setupRateLimitData(target1, key, 1_000 * WAD, type(uint256).max, 1_000 * WAD, block.timestamp);
+
+        // Decrease slope to finite value above defaults — should not overflow
+        vm.prank(CBEAM1);
+        configurator.setRateLimit(address(target1), key, 1_000 * WAD, 1_000 * WAD);
+
+        RateLimitsLike.RateLimitData memory data = target1.getRateLimitData(key);
+        assertEq(data.maxAmount, 1_000 * WAD, "maxAmount should be set correctly");
+        assertEq(data.slope, 1_000 * WAD, "slope should decrease from type(uint256).max");
+    }
+
     // --- LastAmount Capping Tests ---
 
     function testLastAmountCappedAtMaxAmount() public {

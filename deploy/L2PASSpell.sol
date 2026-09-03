@@ -27,20 +27,19 @@ contract L2PASSpell {
     address public immutable beamState;
     address public immutable configurator;
     address public immutable timelock;
-    address public immutable wrapper;
 
-    constructor(address beamState_, address configurator_, address timelock_, address wrapper_) {
+    constructor(address beamState_, address configurator_, address timelock_) {
         beamState    = beamState_;
         configurator = configurator_;
         timelock     = timelock_;
-        wrapper      = wrapper_;
     }
 
     function init(
         uint256          minDelay,
         address          coreCouncil,
         address[] memory cancellers,
-        address[] memory pausers
+        address[] memory pausers,
+        bool             startPaused
     ) external {
         PASInstance memory pas = PASInstance({
             beamState:    beamState,
@@ -49,6 +48,6 @@ contract L2PASSpell {
         });
 
         PASInit.init(pas, minDelay, coreCouncil, cancellers, pausers);
-        PASInit.initTimelockWrapper(pas, wrapper, coreCouncil);
+        if (startPaused) PASInit.pauseTimelock(timelock, address(this));
     }
 }

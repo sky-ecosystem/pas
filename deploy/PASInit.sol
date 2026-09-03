@@ -53,18 +53,32 @@ interface TimelockLike {
     function CANCELLER_ROLE() external view returns (bytes32);
     function PAUSER_ROLE() external view returns (bytes32);
     function grantRole(bytes32, address) external;
-}
-
-interface TimelockWrapperLike {
-    function timelock() external view returns (address);
-    function beamState() external view returns (address);
-    function kiss(address) external;
+    function revokeRole(bytes32, address) external;
+    function pause() external;
 }
 
 interface PASMomLike {
     function beamState() external view returns (address);
     function timelock() external view returns (address);
     function setAuthority(address) external;
+}
+
+struct InitCBeamConfig {
+    address   cBeam;
+    address[] rateLimits;
+    address[] controllers;
+}
+
+struct InitRateLimitConfig {
+    bytes32 key;
+    address rateLimits;
+    uint256 maxAmount;
+    uint256 slope;
+}
+
+struct InitControllerActionConfig {
+    bytes   data;
+    address controller;
 }
 
 library PASInit {
@@ -133,26 +147,71 @@ library PASInit {
         }
     }
 
+    // Call after `init` for starting with spell-only configurations of `DELAYED` actions
+    // The admin is assumed not to be listed in the pausers array, so we do not mistakenly revoke its role
+    function pauseTimelock(
+        address timelock_,
+        address admin
+    ) internal {
+        TimelockLike timelock = TimelockLike(timelock_);
+
+        timelock.grantRole(timelock.PAUSER_ROLE(), admin);
+        timelock.pause();
+        timelock.revokeRole(timelock.PAUSER_ROLE(), admin);
+    }
+
     function initExtras(
         PASInstance memory pasInstance,
         uint256 hop,
         uint256 maxChange,
-        address[] memory cBeams,
         address[] memory rateLimits,
-        address[] memory controllers
+        address[] memory controllers,
+        InitCBeamConfig[] memory cBeamConfigs
     ) internal {
+        require(hop > 0, "PASInit/hop-is-zero");
+
         BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
 
         beamState.setHop(address(0), hop);
         beamState.setMaxChange(address(0), maxChange);
-        for(uint256 i; i < cBeams.length; i++) {
-            beamState.addCBeam(cBeams[i]);
-        }
         for(uint256 i; i < rateLimits.length; i++) {
             beamState.addRateLimits(rateLimits[i]);
         }
         for(uint256 i; i < controllers.length; i++) {
             beamState.addController(controllers[i]);
+        }
+        for(uint256 i; i < cBeamConfigs.length; i++) {
+            InitCBeamConfig memory c = cBeamConfigs[i];
+            beamState.addCBeam(c.cBeam);
+            for(uint256 j; j < c.rateLimits.length; j++) {
+                beamState.setCBeamForRateLimits(c.rateLimits[j], c.cBeam);
+            }
+            for(uint256 j; j < c.controllers.length; j++) {
+                beamState.setCBeamForController(c.controllers[j], c.cBeam);
+            }
+        }
+    }
+
+    function initLimitsAndControllerData(
+        PASInstance                  memory pasInstance,
+        InitRateLimitConfig[]        memory rateLimitConfigs,
+        InitControllerActionConfig[] memory controllerActionConfigs
+    ) internal {
+        BeamStateLike beamState = BeamStateLike(pasInstance.beamState);
+
+        for (uint256 i; i < rateLimitConfigs.length; i++) {
+            beamState.addInitRateLimits(
+                rateLimitConfigs[i].key,
+                rateLimitConfigs[i].rateLimits,
+                rateLimitConfigs[i].maxAmount,
+                rateLimitConfigs[i].slope
+            );
+        }
+        for (uint256 i; i < controllerActionConfigs.length; i++) {
+            beamState.addInitControllerActions(
+                controllerActionConfigs[i].data,
+                controllerActionConfigs[i].controller
+            );
         }
     }
 
@@ -195,25 +254,5 @@ library PASInit {
         // --- Chainlog ---
 
         dss.chainlog.setAddress(key, address(mom));
-    }
-
-    function initTimelockWrapper(
-        PASInstance memory pasInstance,
-        address timelockWrapper_,
-        address coreCouncil
-    ) internal {
-        TimelockLike        timelock        = TimelockLike(pasInstance.timelock);
-        TimelockWrapperLike timelockWrapper = TimelockWrapperLike(timelockWrapper_);
-
-        // --- Sanity checks ---
-
-        require(timelockWrapper.timelock()  == pasInstance.timelock,  "PASInit/wrapper-timelock-mismatch");
-        require(timelockWrapper.beamState() == pasInstance.beamState, "PASInit/wrapper-beamState-mismatch");
-
-        // --- Set permissions ---
-
-        // Grant the coreCouncil as the proposer through the wrapper
-        timelock.grantRole(timelock.PROPOSER_ROLE(), address(timelockWrapper));
-        timelockWrapper.kiss(coreCouncil);
     }
 }
