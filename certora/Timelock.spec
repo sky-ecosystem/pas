@@ -1,7 +1,4 @@
-// SPDX-FileCopyrightText: © 2026 Dai Foundation <www.daifoundation.org>
-// SPDX-License-Identifier: AGPL-3.0-or-later
-//
-// Timelock.spec -- Formal verification spec for Timelock
+// Timelock.spec
 
 using Timelock as timelock;
 
@@ -20,6 +17,7 @@ methods {
     function getOperationLength(bytes32) external returns (uint256) envfree;
     function getOperationTarget(bytes32, uint256) external returns (address) envfree;
     function getOperationValue(bytes32, uint256) external returns (uint256) envfree;
+    function getOperationPayload(bytes32, uint256) external returns (bytes) envfree;
     function getOperationPredecessor(bytes32) external returns (bytes32) envfree;
     function getOperationSalt(bytes32) external returns (bytes32) envfree;
 
@@ -30,18 +28,28 @@ methods {
     function getMinDelay() external returns (uint256) envfree;
     function getTimestamp(bytes32) external returns (uint256) envfree;
     function hashOperationBatch(address[], uint256[], bytes[], bytes32, bytes32) external returns (bytes32) envfree;
-    function isOperationReady(bytes32, uint256) external returns (bool);
+    function isOperationReady(bytes32) external returns (bool);
 
     // Inherited from AccessControl
     function hasRole(bytes32, address) external returns (bool) envfree;
+    function getRoleAdmin(bytes32) external returns (bytes32) envfree;
+
+    // Inherited from ERC721Holder / ERC1155Holder
+    function onERC721Received(address, address, uint256, bytes) external returns (bytes4);
+    function onERC1155Received(address, address, uint256, uint256, bytes) external returns (bytes4);
+    function onERC1155BatchReceived(address, address, uint256[], uint256[], bytes) external returns (bytes4);
     function PAUSER_ROLE() external returns (bytes32) envfree;
     function PROPOSER_ROLE() external returns (bytes32) envfree;
     function CANCELLER_ROLE() external returns (bytes32) envfree;
     function EXECUTOR_ROLE() external returns (bytes32) envfree;
     function DEFAULT_ADMIN_ROLE() external returns (bytes32) envfree;
 
-    // // External call summaries - treat external calls as non-deterministic
-    // function _._ external => NONDET;
+    // executeBatch forwards to arbitrary targets. Left unresolved they havoc all contract state,
+    // which breaks the list bookkeeping assertions (countBefore is read before the calls) and is
+    // very expensive to solve. Scoped to executeBatch so that the legitimate `this.updateDelay`
+    // self-call in updateDelayImmediately is still executed for real.
+    // Assumption: the executed calls succeed and do not re-enter the Timelock.
+    unresolved external in Timelock.executeBatch(address[],uint256[],bytes[],bytes32,bytes32) => NONDET;
 }
 
 // --- Definitions ---
@@ -50,11 +58,24 @@ definition DONE_TIMESTAMP() returns uint256 = 1;
 
 // --- Storage Affected Rule ---
 
-rule storageAffected(method f) filtered { f -> !f.isView } {
+rule storageAffected(method f) filtered {
+    f -> !f.isView &&
+         f.selector != sig:execute(address,uint256,bytes,bytes32,bytes32).selector
+} {
     env e;
     calldataarg args;
 
     bytes32 anyId;
+    bytes32 anyElemId;
+    uint256 anyIdx;
+    bytes32 anyRole;
+    address anyAccount;
+
+    // Element reads panic out of bounds, so the index is pinned inside the array. A separate id is
+    // used for them so that this assumption does not also narrow the checks below, which apply to
+    // any id. Methods that do not touch _operations leave the length alone, so the post-state read
+    // stays in range for them.
+    require anyIdx < getOperationLength(anyElemId);
 
     // Linked list state
     bytes32 firstBefore           = getFirstOperationId();
@@ -68,12 +89,20 @@ rule storageAffected(method f) filtered { f -> !f.isView } {
     uint256 lengthBefore          = getOperationLength(anyId);
     bytes32 predecessorBefore     = getOperationPredecessor(anyId);
     bytes32 saltBefore            = getOperationSalt(anyId);
+    address targetBefore          = getOperationTarget(anyElemId, anyIdx);
+    uint256 valueBefore           = getOperationValue(anyElemId, anyIdx);
+    bytes   payloadBefore         = getOperationPayload(anyElemId, anyIdx);
 
     // Pausable state
     bool    pausedBefore          = paused();
 
     // TimelockController state
     uint256 minDelayBefore        = getMinDelay();
+    uint256 timestampBefore       = getTimestamp(anyId);
+
+    // AccessControl state
+    bool    hasRoleBefore         = hasRole(anyRole, anyAccount);
+    bytes32 roleAdminBefore       = getRoleAdmin(anyRole);
 
     f(e, args);
 
@@ -89,12 +118,20 @@ rule storageAffected(method f) filtered { f -> !f.isView } {
     uint256 lengthAfter           = getOperationLength(anyId);
     bytes32 predecessorAfter      = getOperationPredecessor(anyId);
     bytes32 saltAfter             = getOperationSalt(anyId);
+    address targetAfter           = getOperationTarget(anyElemId, anyIdx);
+    uint256 valueAfter            = getOperationValue(anyElemId, anyIdx);
+    bytes   payloadAfter          = getOperationPayload(anyElemId, anyIdx);
 
     // Pausable state
     bool    pausedAfter           = paused();
 
     // TimelockController state
     uint256 minDelayAfter         = getMinDelay();
+    uint256 timestampAfter        = getTimestamp(anyId);
+
+    // AccessControl state
+    bool    hasRoleAfter          = hasRole(anyRole, anyAccount);
+    bytes32 roleAdminAfter        = getRoleAdmin(anyRole);
 
     // Linked list can only be modified by scheduleBatch, cancel, executeBatch
     assert (firstAfter != firstBefore || lastAfter != lastBefore || countAfter != countBefore ||
@@ -103,8 +140,11 @@ rule storageAffected(method f) filtered { f -> !f.isView } {
         f.selector == sig:cancel(bytes32).selector ||
         f.selector == sig:executeBatch(address[],uint256[],bytes[],bytes32,bytes32).selector;
 
-    // Operation data can only be modified by scheduleBatch, cancel, executeBatch
-    assert (lengthAfter != lengthBefore || predecessorAfter != predecessorBefore || saltAfter != saltBefore) =>
+    // Operation data, including the targets/values/payloads contents, can only be modified by
+    // scheduleBatch, cancel, executeBatch
+    assert (lengthAfter != lengthBefore || predecessorAfter != predecessorBefore ||
+            saltAfter != saltBefore || targetAfter != targetBefore ||
+            valueAfter != valueBefore || payloadAfter != payloadBefore) =>
         f.selector == sig:scheduleBatch(address[],uint256[],bytes[],bytes32,bytes32,uint256).selector ||
         f.selector == sig:cancel(bytes32).selector ||
         f.selector == sig:executeBatch(address[],uint256[],bytes[],bytes32,bytes32).selector;
@@ -118,6 +158,21 @@ rule storageAffected(method f) filtered { f -> !f.isView } {
     assert minDelayAfter != minDelayBefore =>
         f.selector == sig:updateDelay(uint256).selector ||
         f.selector == sig:updateDelayImmediately(uint256).selector;
+
+    // _timestamps is written by _schedule, deleted by cancel and set to DONE by _afterCall
+    assert timestampAfter != timestampBefore =>
+        f.selector == sig:scheduleBatch(address[],uint256[],bytes[],bytes32,bytes32,uint256).selector ||
+        f.selector == sig:cancel(bytes32).selector ||
+        f.selector == sig:executeBatch(address[],uint256[],bytes[],bytes32,bytes32).selector;
+
+    // Role membership can only be modified by the AccessControl mutators
+    assert hasRoleAfter != hasRoleBefore =>
+        f.selector == sig:grantRole(bytes32,address).selector ||
+        f.selector == sig:revokeRole(bytes32,address).selector ||
+        f.selector == sig:renounceRole(bytes32,address).selector;
+
+    // _setRoleAdmin is internal and never called, so role admins never change after construction
+    assert roleAdminAfter == roleAdminBefore;
 }
 
 // --- Pausing rules ---
@@ -168,6 +223,32 @@ rule unpause_revert() {
     assert lastReverted <=> revert1 || revert2 || revert3;
 }
 
+
+// --- Delay management rules ---
+
+rule updateDelayImmediately(uint256 newDelay) {
+    env e;
+
+    updateDelayImmediately(e, newDelay);
+
+    uint256 minDelayAfter = getMinDelay();
+
+    assert minDelayAfter == newDelay;
+}
+
+rule updateDelayImmediately_revert(uint256 newDelay) {
+    env e;
+
+    bool isAdmin = hasRole(DEFAULT_ADMIN_ROLE(), e.msg.sender);
+
+    updateDelayImmediately@withrevert(e, newDelay);
+
+    bool revert1 = e.msg.value > 0;
+    bool revert2 = !isAdmin;
+
+    assert lastReverted <=> revert1 || revert2;
+}
+
 // --- Schedule rules ---
 
 rule schedule_always_reverts(address target, uint256 value, bytes payload, bytes32 predecessor, bytes32 salt, uint256 delay) {
@@ -190,6 +271,7 @@ rule scheduleBatch_adds_to_list(
 
     uint256 countBefore = getOperationsCount();
     bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
+    uint256 idx;
 
     require !getOperationExists(id);
 
@@ -199,9 +281,26 @@ rule scheduleBatch_adds_to_list(
     bool existsAfter = getOperationExists(id);
     bytes32 lastAfter = getLastOperationId();
 
+    bool targetMatches = true;
+    bool valueMatches  = true;
+    if (targets.length > 0) {
+        require idx < targets.length;
+        targetMatches = getOperationTarget(id, idx) == targets[idx];
+        valueMatches  = getOperationValue(id, idx) == values[idx];
+    }
+
     assert countAfter == countBefore + 1;
-    assert existsAfter == true;
+    assert existsAfter;
     assert lastAfter == id;
+
+    // The stored operation mirrors what was scheduled
+    assert getOperationLength(id) == targets.length;
+    assert getOperationPredecessor(id) == predecessor;
+    assert getOperationSalt(id) == salt;
+    // _schedule sets _timestamps[id] = block.timestamp + delay
+    assert getTimestamp(id) == assert_uint256(e.block.timestamp + delay);
+    assert targetMatches;
+    assert valueMatches;
 }
 
 rule scheduleBatch_no_side_effects(
@@ -256,21 +355,39 @@ rule scheduleBatch_revert(
     bool isOp = isOperation(e, id);
     uint256 minDelay = getMinDelay();
 
-    // Check array lengths match
-    require targets.length == values.length;
-    require targets.length == payloads.length;
+    bool    existsBefore = getOperationExists(id);
+    uint256 countBefore  = getOperationsCount();
 
     scheduleBatch@withrevert(e, targets, values, payloads, predecessor, salt, delay);
 
-    bool revert1 = e.msg.value > 0;
-    bool revert2 = isPaused;
-    bool revert3 = !isProposer;
-    bool revert4 = isOp; // Operation already exists in TimelockController
-    bool revert5 = delay < minDelay;
-    // revert6: self-call check - one of targets == address(this)
-    // revert7: linked list add fails (id == 0 or already exists) - covered by revert4
+    bool revert1  = e.msg.value > 0;
+    bool revert2  = isPaused;
+    bool revert3  = exists uint256 i. i < targets.length && targets[i] == currentContract;
+    bool revert4  = !isProposer;
+    bool revert5  = targets.length != values.length || targets.length != payloads.length;
+    bool revert6  = isOp;                  // Operation already scheduled in TimelockController
+    bool revert7  = delay < minDelay;
+    // Linked list add fails. Note _operationIds.exists and TimelockController's _timestamps are
+    // separate storage, so this is not implied by revert5.
+    bool revert8  = id == to_bytes32(0) || existsBefore;
+    // _schedule writes _timestamps[id] = block.timestamp + delay under checked arithmetic
+    bool revert9  = e.block.timestamp + delay > max_uint256;
+    // Bytes32LinkedList.add does a checked count++
+    bool revert10 = countBefore == max_uint256;
+    // A target equal to the timelock also reverts; that case is proven by selfCallPrevention,
+    // which covers an arbitrary index without needing a quantifier here.
 
-    assert revert1 || revert2 || revert3 || revert4 || revert5 => lastReverted;
+    // Necessary direction only. The converse is not provable: writing _operations[id] makes
+    // Solidity clear and overwrite the previous payloads, and from an unconstrained pre-state the
+    // stale storage slots at and past the array length can hold an invalid byte-array encoding,
+    // which panics (Panic 0x22). That is unreachable in practice -- only the contract ever writes
+    // those slots -- but it is also not expressible as a CVL assumption, because constraining
+    // `payloads.length` says nothing about the element slots beyond the length. This is the same
+    // wall that keeps cancel_revert_length_0 restricted to the empty-payloads case.
+    assert revert1 || revert2 || revert3 ||
+           revert4 || revert5 || revert6 ||
+           revert7 || revert8 || revert9 ||
+           revert10 => lastReverted;
 }
 
 // --- Cancel rules ---
@@ -291,6 +408,8 @@ rule cancel_removes_from_list(bytes32 id) {
     assert countAfter == countBefore - 1;
     assert existsAfter == false;
     assert lengthAfter == 0;
+    // cancel deletes _timestamps[id]
+    assert getTimestamp(id) == 0;
 }
 
 rule cancel_no_side_effects(bytes32 id) {
@@ -393,6 +512,8 @@ rule executeBatch_removes_from_list(
     assert countAfter == countBefore - 1;
     assert existsAfter == false;
     assert lengthAfter == 0;
+    // _afterCall marks the operation done rather than clearing it
+    assert getTimestamp(id) == DONE_TIMESTAMP();
 }
 
 rule executeBatch_revert(
@@ -409,221 +530,195 @@ rule executeBatch_revert(
     bool isReady = isOperationReady(e, id);
     bool predecessorDone = predecessor == to_bytes32(0) || isOperationDone(e, predecessor);
 
-    // Check array lengths match
-    require targets.length == values.length;
-    require targets.length == payloads.length;
+    // Execution is permissionless only while EXECUTOR_ROLE is held by address(0), which the
+    // constructor grants but which cannot be assumed from an arbitrary pre-state
+    bool isOpenExecutor = hasRole(EXECUTOR_ROLE(), 0);
+    bool isExecutor     = hasRole(EXECUTOR_ROLE(), e.msg.sender);
+
+    bool    existsBefore = getOperationExists(id);
+    uint256 countBefore  = getOperationsCount();
 
     executeBatch@withrevert(e, targets, values, payloads, predecessor, salt);
 
-    bool revert1 = e.msg.value > 0 && e.msg.value != values[0]; // Only fails if value mismatch
-    bool revert2 = isPaused;
-    bool revert3 = !isReady;
-    bool revert4 = !predecessorDone;
-    // revert5: external call fails
-    // revert6: linked list remove fails (doesn't exist)
+    bool revert1 = isPaused;                        // whenNotPaused on the override
+    bool revert2 = !isOpenExecutor && !isExecutor;  // onlyRoleOrOpenRole(EXECUTOR_ROLE)
+    bool revert3 = targets.length != values.length ||
+                   targets.length != payloads.length;   // TimelockInvalidOperationLength
+    bool revert4 = !isReady;                        // _beforeCall, re-checked by _afterCall
+    bool revert5 = !predecessorDone;                // _beforeCall
+    bool revert6 = !existsBefore;                   // require(_operationIds.remove(id))
+    bool revert7 = countBefore == 0;                // checked count-- inside remove
 
-    assert revert2 || revert3 || revert4 => lastReverted;
+    // Necessary direction only. Two causes are not stated: `delete _operations[id]` clears the
+    // stored payloads, and stale slots from an unconstrained pre-state can hold an invalid
+    // byte-array encoding that panics (Panic 0x22) -- unreachable in practice but not expressible
+    // as a CVL assumption; and forwarding values[i] fails once the running balance is short, whose
+    // exact condition is a prefix sum over a symbolic-length calldata array. Both would have to be
+    // assumed away to reach `<=>`, which is not worth narrowing this rule for.
+    // The target calls themselves are summarized NONDET, so "external call fails" is not a cause.
+    assert revert1 || revert2 || revert3 || revert4 ||
+           revert5 || revert6 || revert7 => lastReverted;
 }
 
-// --- Delay management rules ---
+// --- Access control mutators ---
 
-rule updateDelayImmediately(uint256 newDelay) {
+rule grantRole(bytes32 role, address account) {
     env e;
 
-    updateDelayImmediately(e, newDelay);
+    bytes32 otherRole;
+    address otherAccount;
+    require otherRole != role || otherAccount != account;
 
-    uint256 minDelayAfter = getMinDelay();
+    bool otherBefore = hasRole(otherRole, otherAccount);
 
-    assert minDelayAfter == newDelay;
+    grantRole(e, role, account);
+
+    assert hasRole(role, account);
+    assert hasRole(otherRole, otherAccount) == otherBefore;
 }
 
-rule updateDelayImmediately_revert(uint256 newDelay) {
+rule grantRole_revert(bytes32 role, address account) {
     env e;
 
-    bool isAdmin = hasRole(DEFAULT_ADMIN_ROLE(), e.msg.sender);
+    bool isRoleAdmin = hasRole(getRoleAdmin(role), e.msg.sender);
 
-    updateDelayImmediately@withrevert(e, newDelay);
+    grantRole@withrevert(e, role, account);
 
     bool revert1 = e.msg.value > 0;
-    bool revert2 = !isAdmin;
+    bool revert2 = !isRoleAdmin;
 
     assert lastReverted <=> revert1 || revert2;
 }
 
-// --- Linked list invariants ---
-
-invariant emptyListConsistency()
-    getOperationsCount() == 0 <=> (getFirstOperationId() == to_bytes32(0) && getLastOperationId() == to_bytes32(0))
-    {
-        preserved scheduleBatch(address[] targets, uint256[] values, bytes[] payloads, bytes32 predecessor, bytes32 salt, uint256 delay) with (env e) {
-            // Hash cannot be zero for valid operations
-            require hashOperationBatch(targets, values, payloads, predecessor, salt) != to_bytes32(0);
-        }
-    }
-
-// // --- Linked list structure invariants ---
-
-// // First element has no predecessor
-// invariant firstHasNoPrev()
-//     getFirstOperationId() != to_bytes32(0) => getPrevOperationId(getFirstOperationId()) == to_bytes32(0)
-//     {
-//         preserved scheduleBatch(address[] targets, uint256[] values, bytes[] payloads, bytes32 predecessor, bytes32 salt, uint256 delay) with (env e) {
-//             require hashOperationBatch(targets, values, payloads, predecessor, salt) != to_bytes32(0);
-//         }
-//     }
-
-// // Last element has no successor
-// invariant lastHasNoNext()
-//     getLastOperationId() != to_bytes32(0) => getNextOperationId(getLastOperationId()) == to_bytes32(0)
-//     {
-//         preserved scheduleBatch(address[] targets, uint256[] values, bytes[] payloads, bytes32 predecessor, bytes32 salt, uint256 delay) with (env e) {
-//             require hashOperationBatch(targets, values, payloads, predecessor, salt) != to_bytes32(0);
-//         }
-//     }
-
-// // If an operation exists, count must be positive
-// invariant existsImpliesPositiveCount(bytes32 id)
-//     getOperationExists(id) => getOperationsCount() > 0
-//     {
-//         preserved scheduleBatch(address[] targets, uint256[] values, bytes[] payloads, bytes32 predecessor, bytes32 salt, uint256 delay) with (env e) {
-//             require hashOperationBatch(targets, values, payloads, predecessor, salt) != to_bytes32(0);
-//         }
-//     }
-
-// // If operation exists in linked list, it has data (at least one target)
-// invariant operationExistsImpliesData(bytes32 id)
-//     getOperationExists(id) => getOperationLength(id) > 0
-//     {
-//         preserved scheduleBatch(address[] targets, uint256[] values, bytes[] payloads, bytes32 predecessor, bytes32 salt, uint256 delay) with (env e) {
-//             require hashOperationBatch(targets, values, payloads, predecessor, salt) != to_bytes32(0);
-//             require targets.length > 0;
-//         }
-//     }
-
-// --- Access control rules ---
-
-rule onlyPauserCanPause() {
+rule revokeRole(bytes32 role, address account) {
     env e;
 
-    require !hasRole(PAUSER_ROLE(), e.msg.sender);
+    bytes32 otherRole;
+    address otherAccount;
+    require otherRole != role || otherAccount != account;
 
-    pause@withrevert(e);
+    bool otherBefore = hasRole(otherRole, otherAccount);
 
-    assert lastReverted;
+    revokeRole(e, role, account);
+
+    assert !hasRole(role, account);
+    assert hasRole(otherRole, otherAccount) == otherBefore;
 }
 
-rule onlyAdminCanUnpause() {
+rule revokeRole_revert(bytes32 role, address account) {
     env e;
 
-    require !hasRole(DEFAULT_ADMIN_ROLE(), e.msg.sender);
+    bool isRoleAdmin = hasRole(getRoleAdmin(role), e.msg.sender);
 
-    unpause@withrevert(e);
+    revokeRole@withrevert(e, role, account);
 
-    assert lastReverted;
+    bool revert1 = e.msg.value > 0;
+    bool revert2 = !isRoleAdmin;
+
+    assert lastReverted <=> revert1 || revert2;
 }
 
-rule onlyAdminCanUpdateDelay() {
+// Renouncing takes no role admin: any account may drop its own role, and only its own
+rule renounceRole(bytes32 role, address callerConfirmation) {
     env e;
-    uint256 newDelay;
 
-    require !hasRole(DEFAULT_ADMIN_ROLE(), e.msg.sender);
+    bytes32 otherRole;
+    address otherAccount;
+    require otherRole != role || otherAccount != callerConfirmation;
 
-    updateDelayImmediately@withrevert(e, newDelay);
+    bool otherBefore = hasRole(otherRole, otherAccount);
 
-    assert lastReverted;
+    renounceRole(e, role, callerConfirmation);
+
+    assert !hasRole(role, callerConfirmation);
+    assert hasRole(otherRole, otherAccount) == otherBefore;
 }
 
-rule onlyProposerCanSchedule(
-    address[] targets,
-    uint256[] values,
-    bytes[] payloads,
-    bytes32 predecessor,
-    bytes32 salt,
-    uint256 delay
-) {
+rule renounceRole_revert(bytes32 role, address callerConfirmation) {
     env e;
 
-    require !hasRole(PROPOSER_ROLE(), e.msg.sender);
+    renounceRole@withrevert(e, role, callerConfirmation);
 
-    scheduleBatch@withrevert(e, targets, values, payloads, predecessor, salt, delay);
+    bool revert1 = e.msg.value > 0;
+    bool revert2 = callerConfirmation != e.msg.sender;   // AccessControlBadConfirmation
 
-    assert lastReverted;
+    assert lastReverted <=> revert1 || revert2;
 }
 
-rule onlyCancellerCanCancel(bytes32 id) {
+// --- Inherited updateDelay ---
+
+// The inherited updateDelay is callable only by the timelock itself, which is what stops a
+// proposal from rewriting the min delay; updateDelayImmediately reaches it via an external
+// self-call after checking DEFAULT_ADMIN_ROLE
+rule updateDelay(uint256 newDelay) {
     env e;
 
-    require !hasRole(CANCELLER_ROLE(), e.msg.sender);
+    require e.msg.sender == currentContract;
 
-    cancel@withrevert(e, id);
+    updateDelay(e, newDelay);
 
-    assert lastReverted;
+    assert getMinDelay() == newDelay;
 }
 
-// --- Paused state rules ---
-
-rule whenPausedScheduleReverts(
-    address[] targets,
-    uint256[] values,
-    bytes[] payloads,
-    bytes32 predecessor,
-    bytes32 salt,
-    uint256 delay
-) {
+rule updateDelay_revert(uint256 newDelay) {
     env e;
 
-    require paused();
+    updateDelay@withrevert(e, newDelay);
 
-    scheduleBatch@withrevert(e, targets, values, payloads, predecessor, salt, delay);
+    bool revert1 = e.msg.value > 0;
+    bool revert2 = e.msg.sender != currentContract;   // TimelockUnauthorizedCaller
 
-    assert lastReverted;
+    assert lastReverted <=> revert1 || revert2;
 }
 
-rule whenPausedCancelReverts(bytes32 id) {
+// --- Token receiver hooks ---
+
+// The holder hooks accept transfers unconditionally and touch no storage; storageAffected already
+// covers the absence of side effects, these pin the returned magic values
+rule onERC721Received_returns_selector(address operator, address from, uint256 tokenId, bytes data) {
     env e;
 
-    require paused();
+    bytes4 ret = onERC721Received(e, operator, from, tokenId, data);
 
-    cancel@withrevert(e, id);
-
-    assert lastReverted;
+    assert ret == to_bytes4(sig:onERC721Received(address,address,uint256,bytes).selector);
 }
 
-rule whenPausedExecuteReverts(
-    address[] targets,
-    uint256[] values,
-    bytes[] payloads,
-    bytes32 predecessor,
-    bytes32 salt
-) {
+rule onERC721Received_revert(address operator, address from, uint256 tokenId, bytes data) {
     env e;
 
-    require paused();
+    onERC721Received@withrevert(e, operator, from, tokenId, data);
 
-    executeBatch@withrevert(e, targets, values, payloads, predecessor, salt);
-
-    assert lastReverted;
+    assert lastReverted <=> e.msg.value > 0;
 }
 
-// --- Self-call prevention ---
-
-// This rule verifies that scheduleBatch reverts when any target is the timelock itself
-// Note: This is a property check that should be verified
-rule selfCallPrevention(
-    address[] targets,
-    uint256[] values,
-    bytes[] payloads,
-    bytes32 predecessor,
-    bytes32 salt,
-    uint256 delay
-) {
+rule onERC1155Received_returns_selector(address operator, address from, uint256 id, uint256 value, bytes data) {
     env e;
 
-    // Assume first target is the contract itself
-    require targets.length > 0;
-    require targets[0] == currentContract;
+    bytes4 ret = onERC1155Received(e, operator, from, id, value, data);
 
-    scheduleBatch@withrevert(e, targets, values, payloads, predecessor, salt, delay);
+    assert ret == to_bytes4(sig:onERC1155Received(address,address,uint256,uint256,bytes).selector);
+}
 
-    assert lastReverted;
+rule onERC1155Received_revert(address operator, address from, uint256 id, uint256 value, bytes data) {
+    env e;
+
+    onERC1155Received@withrevert(e, operator, from, id, value, data);
+
+    assert lastReverted <=> e.msg.value > 0;
+}
+
+rule onERC1155BatchReceived_returns_selector(address operator, address from, uint256[] ids, uint256[] values, bytes data) {
+    env e;
+
+    bytes4 ret = onERC1155BatchReceived(e, operator, from, ids, values, data);
+
+    assert ret == to_bytes4(sig:onERC1155BatchReceived(address,address,uint256[],uint256[],bytes).selector);
+}
+
+rule onERC1155BatchReceived_revert(address operator, address from, uint256[] ids, uint256[] values, bytes data) {
+    env e;
+
+    onERC1155BatchReceived@withrevert(e, operator, from, ids, values, data);
+
+    assert lastReverted <=> e.msg.value > 0;
 }

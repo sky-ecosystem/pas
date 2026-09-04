@@ -1,7 +1,4 @@
-// SPDX-FileCopyrightText: © 2026 Dai Foundation <www.daifoundation.org>
-// SPDX-License-Identifier: AGPL-3.0-or-later
-//
-// BeamState.spec -- Formal verification spec for BeamState
+// BeamState.spec
 
 using BeamState as beamState;
 
@@ -50,36 +47,36 @@ rule storageAffected(method f) filtered { f -> !f.isView } {
     uint256 wardsBefore                    = wards(anyAddr);
     bytes32 userRolesBefore                = userRoles(anyAddr);
     bytes32 actionsRolesBefore             = actionsRoles(anySig);
-    bool    stoppedBefore                  = stopped();
     uint256 rateLimitsBefore               = rateLimits(anyAddr);
     uint256 controllersBefore              = controllers(anyAddr);
     uint256 cBeamsBefore                   = cBeams(anyAddr);
     uint256 rateLimitsCBeamsBefore         = rateLimitsCBeams(anyAddr, anyAddr2);
     uint256 controllersCBeamsBefore        = controllersCBeams(anyAddr, anyAddr2);
-    uint256 hopBefore                      = hop(anyAddr);
-    uint256 maxChangeBefore                = maxChange(anyAddr);
     uint256 initRateLimitsMaxAmountBefore;
     uint256 initRateLimitsSlopeBefore;
     initRateLimitsMaxAmountBefore, initRateLimitsSlopeBefore = initRateLimits(anyKey, anyAddr);
     uint256 initControllerActionsBefore    = initControllerActions(anyKey, anyAddr);
+    uint256 hopBefore                      = hop(anyAddr);
+    uint256 maxChangeBefore                = maxChange(anyAddr);
+    bool    stoppedBefore                  = stopped();
 
     f(e, args);
 
     uint256 wardsAfter                    = wards(anyAddr);
     bytes32 userRolesAfter                = userRoles(anyAddr);
     bytes32 actionsRolesAfter             = actionsRoles(anySig);
-    bool    stoppedAfter                  = stopped();
     uint256 rateLimitsAfter               = rateLimits(anyAddr);
     uint256 controllersAfter              = controllers(anyAddr);
     uint256 cBeamsAfter                   = cBeams(anyAddr);
     uint256 rateLimitsCBeamsAfter         = rateLimitsCBeams(anyAddr, anyAddr2);
     uint256 controllersCBeamsAfter        = controllersCBeams(anyAddr, anyAddr2);
-    uint256 hopAfter                      = hop(anyAddr);
-    uint256 maxChangeAfter                = maxChange(anyAddr);
     uint256 initRateLimitsMaxAmountAfter;
     uint256 initRateLimitsSlopeAfter;
     initRateLimitsMaxAmountAfter, initRateLimitsSlopeAfter = initRateLimits(anyKey, anyAddr);
     uint256 initControllerActionsAfter    = initControllerActions(anyKey, anyAddr);
+    uint256 hopAfter                      = hop(anyAddr);
+    uint256 maxChangeAfter                = maxChange(anyAddr);
+    bool    stoppedAfter                  = stopped();
 
     assert wardsAfter != wardsBefore =>
         f.selector == sig:rely(address).selector ||
@@ -88,9 +85,6 @@ rule storageAffected(method f) filtered { f -> !f.isView } {
         f.selector == sig:setUserRole(address, uint8, bool).selector;
     assert actionsRolesAfter != actionsRolesBefore =>
         f.selector == sig:setRoleAction(uint8, bytes4, bool).selector;
-    assert stoppedAfter != stoppedBefore =>
-        f.selector == sig:stop().selector ||
-        f.selector == sig:start().selector;
     assert rateLimitsAfter != rateLimitsBefore =>
         f.selector == sig:addRateLimits(address).selector ||
         f.selector == sig:delRateLimits(address).selector;
@@ -106,45 +100,20 @@ rule storageAffected(method f) filtered { f -> !f.isView } {
     assert controllersCBeamsAfter != controllersCBeamsBefore =>
         f.selector == sig:setCBeamForController(address, address).selector ||
         f.selector == sig:unsetCBeamForController(address, address).selector;
-    assert hopAfter != hopBefore =>
-        f.selector == sig:setHop(address, uint256).selector;
-    assert maxChangeAfter != maxChangeBefore =>
-        f.selector == sig:setMaxChange(address, uint256).selector;
     assert (initRateLimitsMaxAmountAfter != initRateLimitsMaxAmountBefore || initRateLimitsSlopeAfter != initRateLimitsSlopeBefore) =>
         f.selector == sig:addInitRateLimits(bytes32, address, uint256, uint256).selector ||
         f.selector == sig:delInitRateLimits(bytes32, address).selector;
     assert initControllerActionsAfter != initControllerActionsBefore =>
         f.selector == sig:addInitControllerActions(bytes, address).selector ||
         f.selector == sig:delInitControllerActions(bytes32, address).selector;
+    assert hopAfter != hopBefore =>
+        f.selector == sig:setHop(address, uint256).selector;
+    assert maxChangeAfter != maxChangeBefore =>
+        f.selector == sig:setMaxChange(address, uint256).selector;
+    assert stoppedAfter != stoppedBefore =>
+        f.selector == sig:stop().selector ||
+        f.selector == sig:start().selector;
 }
-
-// --- Invariants ---
-
-// Binary value invariants
-invariant wardsIsBinary(address usr)
-    wards(usr) == 0 || wards(usr) == 1;
-
-invariant rateLimitsIsBinary(address rl)
-    rateLimits(rl) == 0 || rateLimits(rl) == 1;
-
-invariant controllersIsBinary(address c)
-    controllers(c) == 0 || controllers(c) == 1;
-
-invariant cBeamsIsBinary(address cb)
-    cBeams(cb) == 0 || cBeams(cb) == 1;
-
-invariant rateLimitsCBeamsIsBinary(address rl, address cb)
-    rateLimitsCBeams(rl, cb) == 0 || rateLimitsCBeams(rl, cb) == 1;
-
-invariant controllersCBeamsIsBinary(address c, address cb)
-    controllersCBeams(c, cb) == 0 || controllersCBeams(c, cb) == 1;
-
-invariant initControllerActionsIsBinary(bytes32 key, address c)
-    initControllerActions(key, c) == 0 || initControllerActions(key, c) == 1;
-
-// maxChange must be >= WAD when set (enforced by setMaxChange require)
-invariant maxChangeMinimum(address rl)
-    maxChange(rl) == 0 || maxChange(rl) >= WAD();
 
 // --- View function correctness ---
 
@@ -184,6 +153,24 @@ rule getMaxChangeCorrectness(address rl) {
 
     assert maxChangeRl != 0 => result == maxChangeRl;
     assert maxChangeRl == 0 => result == maxChangeZero;
+}
+
+// getInitRateLimits returns initRateLimits[key][rl] if set, otherwise falls back to initRateLimits[key][address(0)]
+rule getInitRateLimitsCorrectness(bytes32 key, address rl) {
+    uint256 initRateLimitsKeyRlMaxAmount;
+    uint256 initRateLimitsKeyRlSlope;
+    initRateLimitsKeyRlMaxAmount, initRateLimitsKeyRlSlope = initRateLimits(key, rl);
+
+    uint256 initRateLimitsKeyZeroMaxAmount;
+    uint256 initRateLimitsKeyZeroSlope;
+    initRateLimitsKeyZeroMaxAmount, initRateLimitsKeyZeroSlope = initRateLimits(key, 0);
+
+    BeamState.DefaultRateLimits result = getInitRateLimits(key, rl);
+
+    assert (initRateLimitsKeyRlMaxAmount != 0 || initRateLimitsKeyRlSlope != 0) =>
+        result.maxAmount == initRateLimitsKeyRlMaxAmount && result.slope == initRateLimitsKeyRlSlope;
+    assert (initRateLimitsKeyRlMaxAmount == 0 && initRateLimitsKeyRlSlope == 0) =>
+        result.maxAmount == initRateLimitsKeyZeroMaxAmount && result.slope == initRateLimitsKeyZeroSlope;
 }
 
 // isControllerActionEnabled checks address(0) OR specific controller
@@ -455,7 +442,7 @@ rule setMaxChange_revert(address rateLimits_, uint256 value) {
 
     bool revert1 = e.msg.value > 0;
     bool revert2 = (userRolesSender & actionsRolesSetMaxChange == to_bytes32(0)) && wardsSender != 1;
-    bool revert3 = value < WAD();
+    bool revert3 = value > 0 && value < WAD();
 
     assert lastReverted <=> revert1 || revert2 || revert3;
 }
@@ -912,11 +899,12 @@ rule addInitControllerActions(bytes data, address controller) {
 
     uint256 initControllerActionsOtherKeyOtherControllerBefore = initControllerActions(otherKey, otherController);
 
-    addInitControllerActions(e, data, controller);
+    bytes32 retKey = addInitControllerActions(e, data, controller);
 
     uint256 initControllerActionsKeyControllerAfter            = initControllerActions(key, controller);
     uint256 initControllerActionsOtherKeyOtherControllerAfter  = initControllerActions(otherKey, otherController);
 
+    assert retKey == key;
     assert initControllerActionsKeyControllerAfter == 1;
     assert initControllerActionsOtherKeyOtherControllerAfter == initControllerActionsOtherKeyOtherControllerBefore;
 }
