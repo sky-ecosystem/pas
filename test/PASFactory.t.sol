@@ -28,7 +28,7 @@ contract PASFactoryTest is DssTest {
 
     PASFactory factory;
 
-    address owner = address(0xA);
+    address admin = address(0xA);
     address coreCouncil = address(0xB);
     address canceller = address(0xC);
     address pauser = address(0xD);
@@ -50,7 +50,7 @@ contract PASFactoryTest is DssTest {
     function setUp() public {
         factory = new PASFactory();
 
-        cfg.owner = owner;
+        cfg.admin = admin;
         cfg.minDelay = MIN_DELAY;
         cfg.coreCouncil = coreCouncil;
         cfg.hop = HOP;
@@ -110,10 +110,10 @@ contract PASFactoryTest is DssTest {
         Timelock timelock = Timelock(payable(pas.timelock));
         bytes32 adminRole = timelock.DEFAULT_ADMIN_ROLE();
 
-        assertEq(beamState.wards(owner), 1, "owner should be a BeamState ward");
+        assertEq(beamState.wards(admin), 1, "admin should be a BeamState ward");
         assertEq(beamState.wards(address(factory)), 0, "factory should no longer be a BeamState ward");
         assertEq(beamState.wards(address(factory.deployer())), 0, "deployer should no longer be a BeamState ward");
-        assertTrue(timelock.hasRole(adminRole, owner), "owner should hold Timelock DEFAULT_ADMIN_ROLE");
+        assertTrue(timelock.hasRole(adminRole, admin), "admin should hold Timelock DEFAULT_ADMIN_ROLE");
         assertFalse(timelock.hasRole(adminRole, address(factory)), "factory should no longer hold Timelock DEFAULT_ADMIN_ROLE");
         assertFalse(timelock.hasRole(timelock.PAUSER_ROLE(), address(factory)), "factory should no longer hold Timelock PAUSER_ROLE");
     }
@@ -187,7 +187,7 @@ contract PASFactoryTest is DssTest {
         address timelock = vm.computeCreateAddress(deployer, nonce + 2);
 
         vm.expectEmit(address(factory));
-        emit PASFactory.Deploy(owner, beamState, configurator, timelock);
+        emit PASFactory.Deployment(admin, beamState, configurator, timelock);
         PASInstance memory pas = factory.deploy(cfg);
 
         assertEq(pas.beamState, beamState, "returned beamState should match precomputed address");
@@ -195,15 +195,15 @@ contract PASFactoryTest is DssTest {
         assertEq(pas.timelock, timelock, "returned timelock should match precomputed address");
     }
 
-    function testDeployRevertsOnZeroOwner() public {
-        cfg.owner = address(0);
-        vm.expectRevert("PASFactory/owner-zero-address");
+    function testDeployRevertsOnZeroAdmin() public {
+        cfg.admin = address(0);
+        vm.expectRevert("PASFactory/admin-zero-address");
         factory.deploy(cfg);
     }
 
-    function testDeployRevertsOnFactoryAsOwner() public {
-        cfg.owner = address(factory);
-        vm.expectRevert("PASFactory/owner-is-factory");
+    function testDeployRevertsOnFactoryAsAdmin() public {
+        cfg.admin = address(factory);
+        vm.expectRevert("PASFactory/admin-is-factory");
         factory.deploy(cfg);
     }
 
