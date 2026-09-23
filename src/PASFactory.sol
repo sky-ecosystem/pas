@@ -16,8 +16,6 @@
 
 pragma solidity ^0.8.24;
 
-import { ScriptTools } from "dss-test/ScriptTools.sol";
-
 import { PASDeploy } from "deploy/PASDeploy.sol";
 import { PASInit, InitCBeamConfig, InitRateLimitConfig, InitControllerActionConfig } from "deploy/PASInit.sol";
 import { PASInstance } from "deploy/PASInstance.sol";
@@ -28,8 +26,13 @@ interface TimelockRolesLike {
     function renounceRole(bytes32, address) external;
 }
 
+interface BeamStateLike {
+    function rely(address) external;
+    function deny(address) external;
+}
+
 struct PASFactoryConfig {
-    address owner; // ward of BeamState and default admin role of Timelock
+    address admin; // ward of BeamState and default admin role of Timelock
 
     uint256 minDelay; // minimum delay for timelock
     address coreCouncil; // aBEAM operator
@@ -48,6 +51,7 @@ struct PASFactoryConfig {
     bool timelockPaused;
 }
 
+/// @notice The deploy logic has been separated from Factory contract to avoid exceeding the EIP-170 runtime size limit.
 contract PASDeployer {
     function deploy(uint256 minDelay) external returns (PASInstance memory pas) {
         pas = PASDeploy.deploy(address(this), msg.sender, minDelay);
@@ -58,15 +62,15 @@ contract PASFactory {
     
     PASDeployer public immutable deployer;
 
-    event Deploy(address indexed owner, address beamState, address configurator, address timelock);
+    event Deployment(address indexed admin, address beamState, address configurator, address timelock);
 
     constructor() {
         deployer = new PASDeployer();
     }
 
     function deploy(PASFactoryConfig memory cfg) external returns (PASInstance memory pas) {
-        require(cfg.owner != address(0),     "PASFactory/owner-zero-address");
-        require(cfg.owner != address(this),  "PASFactory/owner-is-factory");
+        require(cfg.admin != address(0),     "PASFactory/admin-zero-address");
+        require(cfg.admin != address(this),  "PASFactory/admin-is-factory");
         require(cfg.hop > 0, "PASFactory/hop-zero");
 
         pas = deployer.deploy(cfg.minDelay);
@@ -83,13 +87,14 @@ contract PASFactory {
             PASInit.pauseTimelock(pas.timelock, address(this));
         }
 
-        ScriptTools.switchOwner(pas.beamState, address(this), cfg.owner);
+        BeamStateLike(pas.beamState).rely(cfg.admin);
+        BeamStateLike(pas.beamState).deny(address(this));
 
         TimelockRolesLike timelock = TimelockRolesLike(pas.timelock);
         bytes32 adminRole = timelock.DEFAULT_ADMIN_ROLE();
-        timelock.grantRole(adminRole, cfg.owner);
+        timelock.grantRole(adminRole, cfg.admin);
         timelock.renounceRole(adminRole, address(this));
 
-        emit Deploy(cfg.owner, pas.beamState, pas.configurator, pas.timelock);
+        emit Deployment(cfg.admin, pas.beamState, pas.configurator, pas.timelock);
     }
 }
