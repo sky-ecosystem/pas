@@ -112,6 +112,7 @@ contract PASFactoryTest is DssTest {
 
         assertEq(beamState.wards(owner), 1, "owner should be a BeamState ward");
         assertEq(beamState.wards(address(factory)), 0, "factory should no longer be a BeamState ward");
+        assertEq(beamState.wards(address(factory.deployer())), 0, "deployer should no longer be a BeamState ward");
         assertTrue(timelock.hasRole(adminRole, owner), "owner should hold Timelock DEFAULT_ADMIN_ROLE");
         assertFalse(timelock.hasRole(adminRole, address(factory)), "factory should no longer hold Timelock DEFAULT_ADMIN_ROLE");
         assertFalse(timelock.hasRole(timelock.PAUSER_ROLE(), address(factory)), "factory should no longer hold Timelock PAUSER_ROLE");
@@ -179,10 +180,11 @@ contract PASFactoryTest is DssTest {
     }
 
     function testDeployEmitsEvent() public {
-        uint64 nonce = vm.getNonce(address(factory));
-        address beamState = vm.computeCreateAddress(address(factory), nonce);
-        address configurator = vm.computeCreateAddress(address(factory), nonce + 1);
-        address timelock = vm.computeCreateAddress(address(factory), nonce + 2);
+        address deployer = address(factory.deployer());
+        uint64 nonce = vm.getNonce(deployer);
+        address beamState = vm.computeCreateAddress(deployer, nonce);
+        address configurator = vm.computeCreateAddress(deployer, nonce + 1);
+        address timelock = vm.computeCreateAddress(deployer, nonce + 2);
 
         vm.expectEmit(address(factory));
         emit PASFactory.Deploy(owner, beamState, configurator, timelock);

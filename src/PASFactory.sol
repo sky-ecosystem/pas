@@ -48,16 +48,28 @@ struct PASFactoryConfig {
     bool timelockPaused;
 }
 
+contract PASDeployer {
+    function deploy(uint256 minDelay) external returns (PASInstance memory pas) {
+        pas = PASDeploy.deploy(address(this), msg.sender, minDelay);
+    }
+}
+
 contract PASFactory {
+    
+    PASDeployer public immutable deployer;
 
     event Deploy(address indexed owner, address beamState, address configurator, address timelock);
+
+    constructor() {
+        deployer = new PASDeployer();
+    }
 
     function deploy(PASFactoryConfig memory cfg) external returns (PASInstance memory pas) {
         require(cfg.owner != address(0),     "PASFactory/owner-zero-address");
         require(cfg.owner != address(this),  "PASFactory/owner-is-factory");
         require(cfg.hop > 0, "PASFactory/hop-zero");
 
-        pas = PASDeploy.deploy(address(this), address(this), cfg.minDelay);
+        pas = deployer.deploy(cfg.minDelay);
 
         PASInit.init(pas, cfg.minDelay, cfg.coreCouncil, cfg.cancellers, cfg.pausers);
 
