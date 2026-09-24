@@ -24,7 +24,7 @@ Emergency governance contract that allows authorized parties to trigger circuit 
 
 Permissionless factory that deploys and initializes a full PAS instance (BeamState, Configurator and Timelock). It configures Timelock roles, the core council and cancellers/pausers, `hop`/`maxChange`, allowed RateLimits and Controllers, cBeam operators, initial rate limits and controller actions, and optionally pause the Timelock. Then, it hands BeamState's ward and the Timelock's `DEFAULT_ADMIN_ROLE` to `cfg.admin` and renounces its own permissions, so the factory keeps no access to the instances it deploys.
 
-Contract creation is delegated to a helper contract `PASDeployer`, which the factory deploys in its constructor. This design choice was made to avoid exceeding EIP-170 runtime bytecode size limit.
+Contract creation is delegated to a helper contract `PASDeployer`, which the factory deploys in its constructor. This design choice was made to avoid exceeding EIP-170 bytecode size limit.
 
 ## Unlimited rate limits
 

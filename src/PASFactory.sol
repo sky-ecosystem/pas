@@ -51,7 +51,7 @@ struct PASFactoryConfig {
     bool timelockPaused;
 }
 
-/// @notice The deploy logic has been separated from Factory contract to avoid exceeding the EIP-170 runtime size limit.
+/// @notice The deploy logic has been separated from the PASFactory to avoid exceeding the EIP-170 size limit.
 contract PASDeployer {
     function deploy(uint256 minDelay) external returns (PASInstance memory pas) {
         pas = PASDeploy.deploy(address(this), msg.sender, minDelay);
