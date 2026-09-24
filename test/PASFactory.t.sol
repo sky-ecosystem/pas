@@ -212,4 +212,16 @@ contract PASFactoryTest is DssTest {
         vm.expectRevert("PASFactory/hop-zero");
         factory.deploy(cfg);
     }
+
+    function testDeployCost() public {
+        _fullConfig();
+
+        uint256 startGas = gasleft();
+        factory.deploy(cfg);
+        uint256 endGas = gasleft();
+        uint256 totalGas = startGas - endGas;
+
+        // Fail if deploy is too expensive (higher than EIP-7825 tx gas limit cap: 2^24)
+        assertLe(totalGas, 2 ** 24, "deploy() cost too high");
+    }
 }
