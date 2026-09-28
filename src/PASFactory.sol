@@ -39,13 +39,13 @@ struct PASFactoryConfig {
     address[] cancellers; // timelock CANCELLER_ROLE holders
     address[] pausers; // timelock PAUSER_ROLE holders
 
-    uint256 hop; // global minimum delay between cBEAM rate increases
-    uint256 maxChange; // global max increase amount between current and new rate limit (WAD)
-    address[] rateLimits; // RateLimits the Configurator can update
-    address[] controllers; // Controller the Configurator can call
+    uint256 hop; // global fallback minimum cooldown in seconds between rate limits increase, enforced per each (RateLimits, key).
+    uint256 maxChange; // global WAD-scaled growth multiplier (e.g., 1.2e18 = current value x 1.2)
+    address[] rateLimits; // RateLimits contracts the Configurator can update
+    address[] controllers; // Controller contracts the Configurator can call
     InitCBeamConfig[] cBeamConfigs; // cBEAM operators configuration
 
-    InitRateLimitConfig[] rateLimitConfigs; // ceilings per-key initial rate limits
+    InitRateLimitConfig[] rateLimitConfigs; // per-key initial rate limits
     InitControllerActionConfig[] controllerActionConfigs; // Controller calldata that cBEAM is allowed to submit
 
     bool timelockPaused;
@@ -69,8 +69,9 @@ contract PASFactory {
     }
 
     function deploy(PASFactoryConfig memory cfg) external returns (PASInstance memory pas) {
-        require(cfg.admin != address(0),     "PASFactory/admin-zero-address");
-        require(cfg.admin != address(this),  "PASFactory/admin-is-factory");
+        require(cfg.admin != address(0),        "PASFactory/admin-zero-address");
+        require(cfg.admin != address(this),     "PASFactory/admin-is-factory");
+        require(cfg.admin != address(deployer), "PASFactory/admin-is-deployer");
         require(cfg.hop > 0, "PASFactory/hop-zero");
 
         pas = deployer.deploy(cfg.minDelay);

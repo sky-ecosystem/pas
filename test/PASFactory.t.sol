@@ -23,6 +23,7 @@ import { PASFactory, PASFactoryConfig } from "src/PASFactory.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
+import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 contract PASFactoryTest is DssTest {
 
@@ -85,6 +86,11 @@ contract PASFactoryTest is DssTest {
         cfg.timelockPaused = true;
     }
 
+    function _deploy() internal returns (PASInstance memory pas) {
+        vm.recordLogs();
+        pas = factory.deploy(cfg);
+    }
+
     function _assertInit(PASInstance memory pas) internal view {
         BeamState beamState = BeamState(pas.beamState);
         Configurator configurator = Configurator(pas.configurator);
@@ -93,8 +99,33 @@ contract PASFactoryTest is DssTest {
         assertEq(address(configurator.beamState()), pas.beamState, "configurator should reference the deployed BeamState");
         assertEq(timelock.getMinDelay(), cfg.minDelay, "timelock minDelay should equal configured minDelay");
 
-        assertTrue(beamState.hasUserRole(address(timelock), DELAYED), "timelock should hold BeamState DELAYED role");
-        assertTrue(beamState.hasUserRole(cfg.coreCouncil, IMMEDIATE), "coreCouncil should hold BeamState IMMEDIATE role");
+        // BeamState roles: exact bitmasks, only 1 role per user/action is expected
+        bytes32 delayed   = bytes32(uint256(1) << DELAYED);
+        bytes32 immediate = bytes32(uint256(1) << IMMEDIATE);
+        assertEq(beamState.userRoles(address(timelock)), delayed,   "timelock should hold exactly the DELAYED role");
+        assertEq(beamState.userRoles(cfg.coreCouncil),   immediate, "coreCouncil should hold exactly the IMMEDIATE role");
+
+        assertEq(beamState.actionsRoles(BeamState.start.selector),                    delayed, "start should be exactly DELAYED");
+        assertEq(beamState.actionsRoles(BeamState.setHop.selector),                   delayed, "setHop should be exactly DELAYED");
+        assertEq(beamState.actionsRoles(BeamState.setMaxChange.selector),             delayed, "setMaxChange should be exactly DELAYED");
+        assertEq(beamState.actionsRoles(BeamState.addRateLimits.selector),            delayed, "addRateLimits should be exactly DELAYED");
+        assertEq(beamState.actionsRoles(BeamState.addController.selector),            delayed, "addController should be exactly DELAYED");
+        assertEq(beamState.actionsRoles(BeamState.addCBeam.selector),                 delayed, "addCBeam should be exactly DELAYED");
+        assertEq(beamState.actionsRoles(BeamState.addInitRateLimits.selector),        delayed, "addInitRateLimits should be exactly DELAYED");
+        assertEq(beamState.actionsRoles(BeamState.addInitControllerActions.selector), delayed, "addInitControllerActions should be exactly DELAYED");
+        assertEq(beamState.actionsRoles(BeamState.stop.selector),                     immediate, "stop should be exactly IMMEDIATE");
+        assertEq(beamState.actionsRoles(BeamState.delRateLimits.selector),            immediate, "delRateLimits should be exactly IMMEDIATE");
+        assertEq(beamState.actionsRoles(BeamState.delController.selector),            immediate, "delController should be exactly IMMEDIATE");
+        assertEq(beamState.actionsRoles(BeamState.delCBeam.selector),                 immediate, "delCBeam should be exactly IMMEDIATE");
+        assertEq(beamState.actionsRoles(BeamState.setCBeamForRateLimits.selector),    immediate, "setCBeamForRateLimits should be exactly IMMEDIATE");
+        assertEq(beamState.actionsRoles(BeamState.unsetCBeamForRateLimits.selector),  immediate, "unsetCBeamForRateLimits should be exactly IMMEDIATE");
+        assertEq(beamState.actionsRoles(BeamState.setCBeamForController.selector),    immediate, "setCBeamForController should be exactly IMMEDIATE");
+        assertEq(beamState.actionsRoles(BeamState.unsetCBeamForController.selector),  immediate, "unsetCBeamForController should be exactly IMMEDIATE");
+        assertEq(beamState.actionsRoles(BeamState.delInitRateLimits.selector),        immediate, "delInitRateLimits should be exactly IMMEDIATE");
+        assertEq(beamState.actionsRoles(BeamState.delInitControllerActions.selector), immediate, "delInitControllerActions should be exactly IMMEDIATE");
+
+        // Timelock roles: expected holders
+        assertTrue(timelock.hasRole(timelock.EXECUTOR_ROLE(), address(0)), "execution should be permissionless");
         assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), cfg.coreCouncil), "coreCouncil should hold Timelock PROPOSER_ROLE");
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), cfg.coreCouncil), "coreCouncil should hold Timelock CANCELLER_ROLE");
         for (uint256 i; i < cfg.cancellers.length; i++) {
@@ -103,6 +134,46 @@ contract PASFactoryTest is DssTest {
         for (uint256 i; i < cfg.pausers.length; i++) {
             assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), cfg.pausers[i]), "configured pauser should hold Timelock PAUSER_ROLE");
         }
+
+        // Events: nothing have been granted or registered outside the configured set during deploy
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 roleActions;
+        uint256 initRateLimits;
+        uint256 initControllerActions;
+        for (uint256 i; i < logs.length; i++) {
+            Vm.Log memory log = logs[i];
+            if (log.emitter == pas.beamState && log.topics[0] == BeamState.SetRoleAction.selector) {
+                roleActions++;
+            } else if (log.emitter == pas.beamState && log.topics[0] == BeamState.AddInitRateLimits.selector) {
+                initRateLimits++;
+            } else if (log.emitter == pas.beamState && log.topics[0] == BeamState.AddInitControllerActions.selector) {
+                initControllerActions++;
+            } else if (log.emitter == pas.beamState && log.topics[0] == BeamState.SetUserRole.selector) {
+                address who = address(uint160(uint256(log.topics[1])));
+                assertTrue(who == address(timelock) || who == cfg.coreCouncil, "unexpected BeamState user role");
+            } else if (log.emitter == pas.timelock && log.topics[0] == IAccessControl.RoleGranted.selector) {
+                bytes32 role    = log.topics[1];
+                address account = address(uint160(uint256(log.topics[2])));
+                bool ok;
+                if      (role == timelock.DEFAULT_ADMIN_ROLE()) ok = account == admin || account == address(timelock) || account == address(factory);
+                else if (role == timelock.EXECUTOR_ROLE())      ok = account == address(0);
+                else if (role == timelock.PROPOSER_ROLE())      ok = account == cfg.coreCouncil;
+                else if (role == timelock.CANCELLER_ROLE())     ok = account == cfg.coreCouncil || _contains(cfg.cancellers, account);
+                else if (role == timelock.PAUSER_ROLE())        ok =  (cfg.timelockPaused && account == address(factory)) || _contains(cfg.pausers, account);
+                assertTrue(ok, "unexpected Timelock role grant");
+            }
+        }
+        // Total number of BeamState action roles, init rate limits and init controller actions set
+        assertEq(roleActions, 18, "unexpected number of BeamState action roles");
+        assertEq(initRateLimits, cfg.rateLimitConfigs.length, "unexpected number of init rate limits");
+        assertEq(initControllerActions, cfg.controllerActionConfigs.length, "unexpected number of init controller actions");
+    }
+
+    function _contains(address[] memory list, address item) internal pure returns (bool) {
+        for (uint256 i; i < list.length; i++) {
+            if (list[i] == item) return true;
+        }
+        return false;
     }
 
     function _assertOwnershipHandedOver(PASInstance memory pas) internal view {
@@ -122,7 +193,7 @@ contract PASFactoryTest is DssTest {
 
     function testDeployFull() public {
         _fullConfig();
-        PASInstance memory pas = factory.deploy(cfg);
+        PASInstance memory pas = _deploy();
 
         BeamState beamState = BeamState(pas.beamState);
         Timelock timelock = Timelock(payable(pas.timelock));
@@ -152,7 +223,7 @@ contract PASFactoryTest is DssTest {
     }
 
     function testDeployMinimalSkipsOptionalSteps() public {
-        PASInstance memory pas = factory.deploy(cfg);
+        PASInstance memory pas = _deploy();
 
         BeamState beamState = BeamState(pas.beamState);
         Timelock timelock = Timelock(payable(pas.timelock));
@@ -177,6 +248,42 @@ contract PASFactoryTest is DssTest {
         assertFalse(timelock.paused(), "timelock should not be paused");
 
         _assertOwnershipHandedOver(pas);
+    }
+
+    function testDeployWithOnlyRateLimitConfigs() public {
+        cfg.rateLimitConfigs.push(InitRateLimitConfig({
+            key: KEY,
+            rateLimits: rateLimits,
+            maxAmount: 1_000_000e18,
+            slope: 1e18
+        }));
+        PASInstance memory pas = _deploy();
+
+        BeamState beamState = BeamState(pas.beamState);
+        _assertInit(pas);
+        _assertOwnershipHandedOver(pas);
+
+        (uint256 maxAmount, uint256 slope) = beamState.initRateLimits(KEY, rateLimits);
+        assertEq(maxAmount, 1_000_000e18, "init rate limit maxAmount should equal configured value");
+        assertEq(slope, 1e18, "init rate limit slope should equal configured value");
+        assertEq(beamState.initControllerActions(keccak256(ACTION), controller), 0, "controller action should not be registered");
+    }
+
+    function testDeployWithOnlyControllerActionConfigs() public {
+        cfg.controllerActionConfigs.push(InitControllerActionConfig({
+            data: ACTION,
+            controller: controller
+        }));
+        PASInstance memory pas = _deploy();
+
+        BeamState beamState = BeamState(pas.beamState);
+        _assertInit(pas);
+        _assertOwnershipHandedOver(pas);
+
+        assertEq(beamState.initControllerActions(keccak256(ACTION), controller), 1, "configured controller action should be registered in BeamState");
+        (uint256 maxAmount, uint256 slope) = beamState.initRateLimits(KEY, rateLimits);
+        assertEq(maxAmount, 0, "init rate limit maxAmount should be zero");
+        assertEq(slope, 0, "init rate limit slope should be zero");
     }
 
     function testDeployEmitsEvent() public {
@@ -204,6 +311,12 @@ contract PASFactoryTest is DssTest {
     function testDeployRevertsOnFactoryAsAdmin() public {
         cfg.admin = address(factory);
         vm.expectRevert("PASFactory/admin-is-factory");
+        factory.deploy(cfg);
+    }
+
+    function testDeployRevertsOnDeployerAsAdmin() public {
+        cfg.admin = address(factory.deployer());
+        vm.expectRevert("PASFactory/admin-is-deployer");
         factory.deploy(cfg);
     }
 
