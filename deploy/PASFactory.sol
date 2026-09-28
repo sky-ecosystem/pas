@@ -16,9 +16,9 @@
 
 pragma solidity ^0.8.24;
 
-import { PASDeploy } from "deploy/PASDeploy.sol";
-import { PASInit, InitCBeamConfig, InitRateLimitConfig, InitControllerActionConfig } from "deploy/PASInit.sol";
-import { PASInstance } from "deploy/PASInstance.sol";
+import { PASDeploy } from "./PASDeploy.sol";
+import { PASInit, InitCBeamConfig, InitRateLimitConfig, InitControllerActionConfig } from "./PASInit.sol";
+import { PASInstance } from "./PASInstance.sol";
 
 interface TimelockRolesLike {
     function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
@@ -51,30 +51,17 @@ struct PASFactoryConfig {
     bool timelockPaused;
 }
 
-/// @notice The deploy logic has been separated from the PASFactory to avoid exceeding the EIP-170 size limit.
-contract PASDeployer {
-    function deploy(uint256 minDelay) external returns (PASInstance memory pas) {
-        pas = PASDeploy.deploy(address(this), msg.sender, minDelay);
-    }
-}
-
+/// @notice One-time factory: deploys and initializes a full PAS instance in its constructor,
+///         hands ownership over to `cfg.admin` and keeps no permissions over it.
 contract PASFactory {
-    
-    PASDeployer public immutable deployer;
-
     event Deployment(address indexed admin, address beamState, address configurator, address timelock);
 
-    constructor() {
-        deployer = new PASDeployer();
-    }
-
-    function deploy(PASFactoryConfig memory cfg) external returns (PASInstance memory pas) {
-        require(cfg.admin != address(0),        "PASFactory/admin-zero-address");
-        require(cfg.admin != address(this),     "PASFactory/admin-is-factory");
-        require(cfg.admin != address(deployer), "PASFactory/admin-is-deployer");
+    constructor(PASFactoryConfig memory cfg) {
+        require(cfg.admin != address(0),    "PASFactory/admin-zero-address");
+        require(cfg.admin != address(this), "PASFactory/admin-is-factory");
         require(cfg.hop > 0, "PASFactory/hop-zero");
 
-        pas = deployer.deploy(cfg.minDelay);
+        PASInstance memory pas = PASDeploy.deploy(address(this), address(this), cfg.minDelay);
 
         PASInit.init(pas, cfg.minDelay, cfg.coreCouncil, cfg.cancellers, cfg.pausers);
 

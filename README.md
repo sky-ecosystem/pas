@@ -22,9 +22,39 @@ Emergency governance contract that allows authorized parties to trigger circuit 
 
 ### PASFactory
 
-Permissionless factory that deploys and initializes a full PAS instance (BeamState, Configurator and Timelock). It configures Timelock roles, the core council and cancellers/pausers, `hop`/`maxChange`, allowed RateLimits and Controllers, cBeam operators, initial rate limits and controller actions. It can optionally pause the Timelock as well. Finally, it hands BeamState's ward and the Timelock's `DEFAULT_ADMIN_ROLE` to `cfg.admin` and renounces its own permissions, so the factory keeps no access to the instances it deploys.
+One-time factory that deploys and initializes a full PAS instance (BeamState, Configurator and Timelock) in its constructor, as a single PAS setup is expected per chain. The deployed addresses are emitted in the `Deployment` event. It configures Timelock roles, the core council and cancellers/pausers, `hop`/`maxChange`, allowed RateLimits and Controllers, cBeam operators, initial rate limits and controller actions. It can optionally pause the Timelock as well. Finally, it hands BeamState's ward and the Timelock's `DEFAULT_ADMIN_ROLE` to `cfg.admin` and renounces its own permissions, so the factory keeps no access to the instance it deploys.
 
-Contract creation is delegated to a helper contract `PASDeployer`, which the factory deploys in its constructor. This design choice was made to avoid exceeding EIP-170 bytecode size limit.
+#### Deployment
+
+The whole `PASFactoryConfig` is passed as a single tuple constructor argument:
+
+```bash
+forge create deploy/PASFactory.sol:PASFactory \
+    --rpc-url $ETH_RPC_URL \
+    --account $ACCOUNT \
+    --broadcast \
+    --constructor-args "(\
+        $ADMIN,\
+        $MIN_DELAY,\
+        $CORE_COUNCIL,\
+        [$CANCELLER],\
+        [$PAUSER],\
+        $HOP,\
+        $MAX_CHANGE,\
+        [$RATE_LIMITS],\
+        [$CONTROLLER],\
+        [($CBEAM,[$RATE_LIMITS],[$CONTROLLER])],\
+        [($KEY,$RATE_LIMITS,$MAX_AMOUNT,$SLOPE)],\
+        [($ACTION_DATA,$CONTROLLER)],\
+        false)"
+```
+
+The deployed BeamState, Configurator and Timelock addresses can be read from the `Deployment` event, the last log of the deployment transaction:
+
+```bash
+cast decode-abi --input "Deployment(address,address,address)" \
+    $(cast receipt $TX_HASH --json | jq -r '.logs[-1].data')
+```
 
 ## Unlimited rate limits
 
