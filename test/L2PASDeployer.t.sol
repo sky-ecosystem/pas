@@ -89,22 +89,16 @@ contract L2PASDeployerTest is DssTest {
         deployer = new L2PASDeployer(cfg);
         logs = vm.getRecordedLogs();
 
-        // Instance addresses are only exposed through the `Deployment` event
-        bool found;
-        for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter == address(deployer) && logs[i].topics[0] == L2PASDeployer.Deployment.selector) {
-                assertFalse(found, "Deployment should be emitted once");
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), cfg.admin, "Deployment admin should equal configured admin");
-                (pas.beamState, pas.configurator, pas.timelock) = abi.decode(logs[i].data, (address, address, address));
-                found = true;
-            }
-        }
-        assertTrue(found, "Deployment should be emitted");
+        pas = PASInstance({
+            beamState:    deployer.beamState(),
+            configurator: deployer.configurator(),
+            timelock:     deployer.timelock()
+        });
 
-        // Emitted addresses should be the ones created by the deployer, derived from its nonces
-        assertEq(pas.beamState,    vm.computeCreateAddress(address(deployer), 1), "Deployment beamState should be the deployer's 1st CREATE");
-        assertEq(pas.configurator, vm.computeCreateAddress(address(deployer), 2), "Deployment configurator should be the deployer's 2nd CREATE");
-        assertEq(pas.timelock,     vm.computeCreateAddress(address(deployer), 3), "Deployment timelock should be the deployer's 3rd CREATE");
+        // Addresses should be the ones created by the deployer, derived from its nonces
+        assertEq(pas.beamState,    vm.computeCreateAddress(address(deployer), 1), "beamState should be the deployer's 1st CREATE");
+        assertEq(pas.configurator, vm.computeCreateAddress(address(deployer), 2), "configurator should be the deployer's 2nd CREATE");
+        assertEq(pas.timelock,     vm.computeCreateAddress(address(deployer), 3), "timelock should be the deployer's 3rd CREATE");
     }
 
     function _assertInit(PASInstance memory pas, Vm.Log[] memory logs) internal view {

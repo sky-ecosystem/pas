@@ -56,7 +56,9 @@ struct L2PASDeployerConfig {
 /// @dev    It is only meant to be used on L2s: on Ethereum mainnet, PAS is initialized through
 ///         a spell instead, which also sets up PASMom and adds the chainlog entries.
 contract L2PASDeployer {
-    event Deployment(address indexed admin, address beamState, address configurator, address timelock);
+    address public immutable beamState;
+    address public immutable configurator;
+    address public immutable timelock;
 
     constructor(L2PASDeployerConfig memory cfg) {
         require(cfg.admin != address(0),    "L2PASDeployer/admin-zero-address");
@@ -77,11 +79,12 @@ contract L2PASDeployer {
         BeamStateLike(pas.beamState).rely(cfg.admin);
         BeamStateLike(pas.beamState).deny(address(this));
 
-        TimelockRolesLike timelock = TimelockRolesLike(pas.timelock);
-        bytes32 adminRole = timelock.DEFAULT_ADMIN_ROLE();
-        timelock.grantRole(adminRole, cfg.admin);
-        timelock.renounceRole(adminRole, address(this));
+        bytes32 adminRole = TimelockRolesLike(pas.timelock).DEFAULT_ADMIN_ROLE();
+        TimelockRolesLike(pas.timelock).grantRole(adminRole, cfg.admin);
+        TimelockRolesLike(pas.timelock).renounceRole(adminRole, address(this));
 
-        emit Deployment(cfg.admin, pas.beamState, pas.configurator, pas.timelock);
+        beamState    = pas.beamState;
+        configurator = pas.configurator;
+        timelock     = pas.timelock;
     }
 }
