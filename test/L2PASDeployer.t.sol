@@ -19,15 +19,15 @@ pragma solidity ^0.8.24;
 import "dss-test/DssTest.sol";
 import { PASInstance } from "deploy/PASInstance.sol";
 import { InitRateLimitConfig, InitControllerActionConfig, InitCBeamConfig } from "deploy/PASInit.sol";
-import { PASDeployer, PASDeployerConfig } from "deploy/PASDeployer.sol";
+import { L2PASDeployer, L2PASDeployerConfig } from "deploy/L2PASDeployer.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
 
-contract PASDeployerTest is DssTest {
+contract L2PASDeployerTest is DssTest {
 
-    PASDeployer deployer;
+    L2PASDeployer deployer;
 
     address admin = address(0xA);
     address coreCouncil = address(0xB);
@@ -46,7 +46,7 @@ contract PASDeployerTest is DssTest {
     uint8 constant DELAYED = 1;
     uint8 constant IMMEDIATE = 2;
 
-    PASDeployerConfig cfg;
+    L2PASDeployerConfig cfg;
 
     function setUp() public {
         cfg.admin = admin;
@@ -86,13 +86,13 @@ contract PASDeployerTest is DssTest {
 
     function _deploy() internal returns (PASInstance memory pas, Vm.Log[] memory logs) {
         vm.recordLogs();
-        deployer = new PASDeployer(cfg);
+        deployer = new L2PASDeployer(cfg);
         logs = vm.getRecordedLogs();
 
         // Instance addresses are only exposed through the `Deployment` event
         bool found;
         for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter == address(deployer) && logs[i].topics[0] == PASDeployer.Deployment.selector) {
+            if (logs[i].emitter == address(deployer) && logs[i].topics[0] == L2PASDeployer.Deployment.selector) {
                 assertFalse(found, "Deployment should be emitted once");
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), cfg.admin, "Deployment admin should equal configured admin");
                 (pas.beamState, pas.configurator, pas.timelock) = abi.decode(logs[i].data, (address, address, address));
@@ -266,34 +266,34 @@ contract PASDeployerTest is DssTest {
 
     function testDeployRevertsOnZeroAdmin() public {
         cfg.admin = address(0);
-        vm.expectRevert("PASDeployer/admin-zero-address");
-        new PASDeployer(cfg);
+        vm.expectRevert("L2PASDeployer/admin-zero-address");
+        new L2PASDeployer(cfg);
     }
 
     function testDeployRevertsOnDeployerAsAdmin() public {
         cfg.admin = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
-        vm.expectRevert("PASDeployer/admin-is-deployer");
-        new PASDeployer(cfg);
+        vm.expectRevert("L2PASDeployer/admin-is-deployer");
+        new L2PASDeployer(cfg);
     }
 
     function testDeployCost() public {
         _fullConfig();
 
         uint256 startGas = gasleft();
-        new PASDeployer(cfg);
+        new L2PASDeployer(cfg);
         uint256 endGas = gasleft();
         uint256 totalGas = startGas - endGas;
 
         // Fail if deploy is too expensive (higher than EIP-7825 tx gas limit cap: 2^24)
-        assertLe(totalGas, 2 ** 24, "PASDeployer deployment cost too high");
+        assertLe(totalGas, 2 ** 24, "L2PASDeployer deployment cost too high");
     }
 
     function testInitcodeSize() public {
         _fullConfig();
 
-        uint256 initcodeSize = abi.encodePacked(type(PASDeployer).creationCode, abi.encode(cfg)).length;
+        uint256 initcodeSize = abi.encodePacked(type(L2PASDeployer).creationCode, abi.encode(cfg)).length;
 
         // Fail if initcode (creation code + constructor args) exceeds EIP-3860 limit: 2 * 24576
-        assertLe(initcodeSize, 2 * 24576, "PASDeployer initcode too large");
+        assertLe(initcodeSize, 2 * 24576, "L2PASDeployer initcode too large");
     }
 }

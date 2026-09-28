@@ -20,7 +20,7 @@ Extended OpenZeppelin TimelockController with pausing support, permissionless ex
 
 Emergency governance contract that allows authorized parties to trigger circuit breakers. Can call `stop()` on BeamState to halt Configurator operations and `pause()` on Timelock to block scheduling and execution. Callable by the owner or via the Chief's hat through the authority.
 
-### PASDeployer
+### L2PASDeployer
 
 One-time deployer that deploys and initializes a full PAS instance (BeamState, Configurator and Timelock) in its constructor. It is only expected to be used on L2s: on Ethereum mainnet, PAS is initialized through a spell, which also sets up PASMom and adds the chainlog entries.
 
@@ -28,10 +28,10 @@ It configures Timelock roles, the core council and cancellers/pausers, `hop`/`ma
 
 #### Deployment
 
-The whole `PASDeployerConfig` is passed as a single tuple constructor argument:
+The whole `L2PASDeployerConfig` is passed as a single tuple constructor argument:
 
 ```bash
-forge create deploy/PASDeployer.sol:PASDeployer \
+forge create deploy/L2PASDeployer.sol:L2PASDeployer \
     --rpc-url $ETH_RPC_URL \
     --account $ACCOUNT \
     --broadcast \

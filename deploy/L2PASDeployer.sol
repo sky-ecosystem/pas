@@ -31,7 +31,7 @@ interface BeamStateLike {
     function deny(address) external;
 }
 
-struct PASDeployerConfig {
+struct L2PASDeployerConfig {
     address admin; // ward of BeamState and default admin role of Timelock
 
     uint256 minDelay; // minimum delay for timelock
@@ -55,12 +55,12 @@ struct PASDeployerConfig {
 ///         hands ownership over to `cfg.admin` and keeps no permissions over it.
 /// @dev    It is only meant to be used on L2s: on Ethereum mainnet, PAS is initialized through
 ///         a spell instead, which also sets up PASMom and adds the chainlog entries.
-contract PASDeployer {
+contract L2PASDeployer {
     event Deployment(address indexed admin, address beamState, address configurator, address timelock);
 
-    constructor(PASDeployerConfig memory cfg) {
-        require(cfg.admin != address(0),    "PASDeployer/admin-zero-address");
-        require(cfg.admin != address(this), "PASDeployer/admin-is-deployer");
+    constructor(L2PASDeployerConfig memory cfg) {
+        require(cfg.admin != address(0),    "L2PASDeployer/admin-zero-address");
+        require(cfg.admin != address(this), "L2PASDeployer/admin-is-deployer");
 
         PASInstance memory pas = PASDeploy.deploy(address(this), address(this), cfg.minDelay);
 
