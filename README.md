@@ -48,7 +48,7 @@ forge create deploy/PASFactory.sol:PASFactory \
         [($CBEAM,[$RATE_LIMITS],[$CONTROLLER])],\
         [($KEY,$RATE_LIMITS,$MAX_AMOUNT,$SLOPE)],\
         [($ACTION_DATA,$CONTROLLER)],\
-        false)"
+        $TIMELOCK_PAUSED)"
 ```
 
 The deployed BeamState, Configurator and Timelock addresses can be read from the `Deployment` event, the last log of the deployment transaction:
