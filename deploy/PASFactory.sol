@@ -53,13 +53,14 @@ struct PASFactoryConfig {
 
 /// @notice One-time factory: deploys and initializes a full PAS instance in its constructor,
 ///         hands ownership over to `cfg.admin` and keeps no permissions over it.
+/// @dev    It is only meant to be used on L2s: on Ethereum mainnet, PAS is initialized through
+///         a spell instead, which also sets up PASMom and adds the chainlog entries.
 contract PASFactory {
     event Deployment(address indexed admin, address beamState, address configurator, address timelock);
 
     constructor(PASFactoryConfig memory cfg) {
         require(cfg.admin != address(0),    "PASFactory/admin-zero-address");
         require(cfg.admin != address(this), "PASFactory/admin-is-factory");
-        require(cfg.hop > 0, "PASFactory/hop-zero");
 
         PASInstance memory pas = PASDeploy.deploy(address(this), address(this), cfg.minDelay);
 
@@ -67,9 +68,7 @@ contract PASFactory {
 
         PASInit.initExtras(pas, cfg.hop, cfg.maxChange, cfg.rateLimits, cfg.controllers, cfg.cBeamConfigs);
 
-        if (cfg.rateLimitConfigs.length > 0 || cfg.controllerActionConfigs.length > 0) {
-            PASInit.initLimitsAndControllerData(pas, cfg.rateLimitConfigs, cfg.controllerActionConfigs);
-        }
+        PASInit.initLimitsAndControllerData(pas, cfg.rateLimitConfigs, cfg.controllerActionConfigs);
 
         if (cfg.timelockPaused) {
             PASInit.pauseTimelock(pas.timelock, address(this));

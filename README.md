@@ -22,7 +22,9 @@ Emergency governance contract that allows authorized parties to trigger circuit 
 
 ### PASFactory
 
-One-time factory that deploys and initializes a full PAS instance (BeamState, Configurator and Timelock) in its constructor, as a single PAS setup is expected per chain. The deployed addresses are emitted in the `Deployment` event. It configures Timelock roles, the core council and cancellers/pausers, `hop`/`maxChange`, allowed RateLimits and Controllers, cBeam operators, initial rate limits and controller actions. It can optionally pause the Timelock as well. Finally, it hands BeamState's ward and the Timelock's `DEFAULT_ADMIN_ROLE` to `cfg.admin` and renounces its own permissions, so the factory keeps no access to the instance it deploys.
+One-time factory that deploys and initializes a full PAS instance (BeamState, Configurator and Timelock) in its constructor. It is only expected to be used on L2s: on Ethereum mainnet, PAS is initialized through a spell, which also sets up PASMom and adds the chainlog entries.
+
+It configures Timelock roles, the core council and cancellers/pausers, `hop`/`maxChange`, allowed RateLimits and Controllers, cBeam operators, initial rate limits and controller actions. It can optionally pause the Timelock as well. Finally, it hands BeamState's ward and the Timelock's `DEFAULT_ADMIN_ROLE` to `cfg.admin` and renounces its own permissions, so the factory keeps no access to the instance it deploys. The deployed addresses are emitted in the `Deployment` event. 
 
 #### Deployment
 

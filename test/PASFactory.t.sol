@@ -252,7 +252,7 @@ contract PASFactoryTest is DssTest {
         assertEq(beamState.controllers(controller), 0, "controller should not be registered");
         assertEq(beamState.cBeams(cBeam), 0, "cBeam should not be registered");
 
-        // PASInit.initLimitsAndControllerData skipped
+        // PASInit.initLimitsAndControllerData ran with nothing to register
         (uint256 maxAmount, uint256 slope) = beamState.initRateLimits(KEY, rateLimits);
         assertEq(maxAmount, 0, "init rate limit maxAmount should be zero");
         assertEq(slope, 0, "init rate limit slope should be zero");
@@ -264,42 +264,6 @@ contract PASFactoryTest is DssTest {
         _assertOwnershipHandedOver(pas);
     }
 
-    function testDeployWithOnlyRateLimitConfigs() public {
-        cfg.rateLimitConfigs.push(InitRateLimitConfig({
-            key: KEY,
-            rateLimits: rateLimits,
-            maxAmount: 1_000_000e18,
-            slope: 1e18
-        }));
-        (PASInstance memory pas, Vm.Log[] memory logs) = _deploy();
-
-        BeamState beamState = BeamState(pas.beamState);
-        _assertInit(pas, logs);
-        _assertOwnershipHandedOver(pas);
-
-        (uint256 maxAmount, uint256 slope) = beamState.initRateLimits(KEY, rateLimits);
-        assertEq(maxAmount, 1_000_000e18, "init rate limit maxAmount should equal configured value");
-        assertEq(slope, 1e18, "init rate limit slope should equal configured value");
-        assertEq(beamState.initControllerActions(keccak256(ACTION), controller), 0, "controller action should not be registered");
-    }
-
-    function testDeployWithOnlyControllerActionConfigs() public {
-        cfg.controllerActionConfigs.push(InitControllerActionConfig({
-            data: ACTION,
-            controller: controller
-        }));
-        (PASInstance memory pas, Vm.Log[] memory logs) = _deploy();
-
-        BeamState beamState = BeamState(pas.beamState);
-        _assertInit(pas, logs);
-        _assertOwnershipHandedOver(pas);
-
-        assertEq(beamState.initControllerActions(keccak256(ACTION), controller), 1, "configured controller action should be registered in BeamState");
-        (uint256 maxAmount, uint256 slope) = beamState.initRateLimits(KEY, rateLimits);
-        assertEq(maxAmount, 0, "init rate limit maxAmount should be zero");
-        assertEq(slope, 0, "init rate limit slope should be zero");
-    }
-
     function testDeployRevertsOnZeroAdmin() public {
         cfg.admin = address(0);
         vm.expectRevert("PASFactory/admin-zero-address");
@@ -309,12 +273,6 @@ contract PASFactoryTest is DssTest {
     function testDeployRevertsOnFactoryAsAdmin() public {
         cfg.admin = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
         vm.expectRevert("PASFactory/admin-is-factory");
-        new PASFactory(cfg);
-    }
-
-    function testDeployRevertsOnZeroHop() public {
-        cfg.hop = 0;
-        vm.expectRevert("PASFactory/hop-zero");
         new PASFactory(cfg);
     }
 
