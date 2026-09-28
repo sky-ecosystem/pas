@@ -31,7 +31,7 @@ interface BeamStateLike {
     function deny(address) external;
 }
 
-struct PASFactoryConfig {
+struct PASDeployerConfig {
     address admin; // ward of BeamState and default admin role of Timelock
 
     uint256 minDelay; // minimum delay for timelock
@@ -51,16 +51,16 @@ struct PASFactoryConfig {
     bool timelockPaused;
 }
 
-/// @notice One-time factory: deploys and initializes a full PAS instance in its constructor,
+/// @notice One-time deployer: deploys and initializes a full PAS instance in its constructor,
 ///         hands ownership over to `cfg.admin` and keeps no permissions over it.
 /// @dev    It is only meant to be used on L2s: on Ethereum mainnet, PAS is initialized through
 ///         a spell instead, which also sets up PASMom and adds the chainlog entries.
-contract PASFactory {
+contract PASDeployer {
     event Deployment(address indexed admin, address beamState, address configurator, address timelock);
 
-    constructor(PASFactoryConfig memory cfg) {
-        require(cfg.admin != address(0),    "PASFactory/admin-zero-address");
-        require(cfg.admin != address(this), "PASFactory/admin-is-factory");
+    constructor(PASDeployerConfig memory cfg) {
+        require(cfg.admin != address(0),    "PASDeployer/admin-zero-address");
+        require(cfg.admin != address(this), "PASDeployer/admin-is-deployer");
 
         PASInstance memory pas = PASDeploy.deploy(address(this), address(this), cfg.minDelay);
 

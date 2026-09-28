@@ -19,15 +19,15 @@ pragma solidity ^0.8.24;
 import "dss-test/DssTest.sol";
 import { PASInstance } from "deploy/PASInstance.sol";
 import { InitRateLimitConfig, InitControllerActionConfig, InitCBeamConfig } from "deploy/PASInit.sol";
-import { PASFactory, PASFactoryConfig } from "deploy/PASFactory.sol";
+import { PASDeployer, PASDeployerConfig } from "deploy/PASDeployer.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
 
-contract PASFactoryTest is DssTest {
+contract PASDeployerTest is DssTest {
 
-    PASFactory factory;
+    PASDeployer deployer;
 
     address admin = address(0xA);
     address coreCouncil = address(0xB);
@@ -46,7 +46,7 @@ contract PASFactoryTest is DssTest {
     uint8 constant DELAYED = 1;
     uint8 constant IMMEDIATE = 2;
 
-    PASFactoryConfig cfg;
+    PASDeployerConfig cfg;
 
     function setUp() public {
         cfg.admin = admin;
@@ -86,13 +86,13 @@ contract PASFactoryTest is DssTest {
 
     function _deploy() internal returns (PASInstance memory pas, Vm.Log[] memory logs) {
         vm.recordLogs();
-        factory = new PASFactory(cfg);
+        deployer = new PASDeployer(cfg);
         logs = vm.getRecordedLogs();
 
         // Instance addresses are only exposed through the `Deployment` event
         bool found;
         for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter == address(factory) && logs[i].topics[0] == PASFactory.Deployment.selector) {
+            if (logs[i].emitter == address(deployer) && logs[i].topics[0] == PASDeployer.Deployment.selector) {
                 assertFalse(found, "Deployment should be emitted once");
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), cfg.admin, "Deployment admin should equal configured admin");
                 (pas.beamState, pas.configurator, pas.timelock) = abi.decode(logs[i].data, (address, address, address));
@@ -101,10 +101,10 @@ contract PASFactoryTest is DssTest {
         }
         assertTrue(found, "Deployment should be emitted");
 
-        // Emitted addresses should be the ones created by the factory, derived from its nonces
-        assertEq(pas.beamState,    vm.computeCreateAddress(address(factory), 1), "Deployment beamState should be the factory's 1st CREATE");
-        assertEq(pas.configurator, vm.computeCreateAddress(address(factory), 2), "Deployment configurator should be the factory's 2nd CREATE");
-        assertEq(pas.timelock,     vm.computeCreateAddress(address(factory), 3), "Deployment timelock should be the factory's 3rd CREATE");
+        // Emitted addresses should be the ones created by the deployer, derived from its nonces
+        assertEq(pas.beamState,    vm.computeCreateAddress(address(deployer), 1), "Deployment beamState should be the deployer's 1st CREATE");
+        assertEq(pas.configurator, vm.computeCreateAddress(address(deployer), 2), "Deployment configurator should be the deployer's 2nd CREATE");
+        assertEq(pas.timelock,     vm.computeCreateAddress(address(deployer), 3), "Deployment timelock should be the deployer's 3rd CREATE");
     }
 
     function _assertInit(PASInstance memory pas, Vm.Log[] memory logs) internal view {
@@ -170,11 +170,11 @@ contract PASFactoryTest is DssTest {
                 bytes32 role    = log.topics[1];
                 address account = address(uint160(uint256(log.topics[2])));
                 bool ok;
-                if      (role == timelock.DEFAULT_ADMIN_ROLE()) ok = account == admin || account == address(timelock) || account == address(factory);
+                if      (role == timelock.DEFAULT_ADMIN_ROLE()) ok = account == admin || account == address(timelock) || account == address(deployer);
                 else if (role == timelock.EXECUTOR_ROLE())      ok = account == address(0);
                 else if (role == timelock.PROPOSER_ROLE())      ok = account == cfg.coreCouncil;
                 else if (role == timelock.CANCELLER_ROLE())     ok = account == cfg.coreCouncil || _contains(cfg.cancellers, account);
-                else if (role == timelock.PAUSER_ROLE())        ok =  (cfg.timelockPaused && account == address(factory)) || _contains(cfg.pausers, account);
+                else if (role == timelock.PAUSER_ROLE())        ok =  (cfg.timelockPaused && account == address(deployer)) || _contains(cfg.pausers, account);
                 assertTrue(ok, "unexpected Timelock role grant");
             }
         }
@@ -197,10 +197,10 @@ contract PASFactoryTest is DssTest {
         bytes32 adminRole = timelock.DEFAULT_ADMIN_ROLE();
 
         assertEq(beamState.wards(admin), 1, "admin should be a BeamState ward");
-        assertEq(beamState.wards(address(factory)), 0, "factory should no longer be a BeamState ward");
+        assertEq(beamState.wards(address(deployer)), 0, "deployer should no longer be a BeamState ward");
         assertTrue(timelock.hasRole(adminRole, admin), "admin should hold Timelock DEFAULT_ADMIN_ROLE");
-        assertFalse(timelock.hasRole(adminRole, address(factory)), "factory should no longer hold Timelock DEFAULT_ADMIN_ROLE");
-        assertFalse(timelock.hasRole(timelock.PAUSER_ROLE(), address(factory)), "factory should no longer hold Timelock PAUSER_ROLE");
+        assertFalse(timelock.hasRole(adminRole, address(deployer)), "deployer should no longer hold Timelock DEFAULT_ADMIN_ROLE");
+        assertFalse(timelock.hasRole(timelock.PAUSER_ROLE(), address(deployer)), "deployer should no longer hold Timelock PAUSER_ROLE");
     }
 
     // --- Tests ---
@@ -266,34 +266,34 @@ contract PASFactoryTest is DssTest {
 
     function testDeployRevertsOnZeroAdmin() public {
         cfg.admin = address(0);
-        vm.expectRevert("PASFactory/admin-zero-address");
-        new PASFactory(cfg);
+        vm.expectRevert("PASDeployer/admin-zero-address");
+        new PASDeployer(cfg);
     }
 
-    function testDeployRevertsOnFactoryAsAdmin() public {
+    function testDeployRevertsOnDeployerAsAdmin() public {
         cfg.admin = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
-        vm.expectRevert("PASFactory/admin-is-factory");
-        new PASFactory(cfg);
+        vm.expectRevert("PASDeployer/admin-is-deployer");
+        new PASDeployer(cfg);
     }
 
     function testDeployCost() public {
         _fullConfig();
 
         uint256 startGas = gasleft();
-        new PASFactory(cfg);
+        new PASDeployer(cfg);
         uint256 endGas = gasleft();
         uint256 totalGas = startGas - endGas;
 
         // Fail if deploy is too expensive (higher than EIP-7825 tx gas limit cap: 2^24)
-        assertLe(totalGas, 2 ** 24, "PASFactory deployment cost too high");
+        assertLe(totalGas, 2 ** 24, "PASDeployer deployment cost too high");
     }
 
     function testInitcodeSize() public {
         _fullConfig();
 
-        uint256 initcodeSize = abi.encodePacked(type(PASFactory).creationCode, abi.encode(cfg)).length;
+        uint256 initcodeSize = abi.encodePacked(type(PASDeployer).creationCode, abi.encode(cfg)).length;
 
         // Fail if initcode (creation code + constructor args) exceeds EIP-3860 limit: 2 * 24576
-        assertLe(initcodeSize, 2 * 24576, "PASFactory initcode too large");
+        assertLe(initcodeSize, 2 * 24576, "PASDeployer initcode too large");
     }
 }
