@@ -24,7 +24,6 @@ import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
-import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract L2PASDeployerTest is DssTest {
