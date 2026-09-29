@@ -295,6 +295,11 @@ contract L2PASDeployerTest is DssTest {
         vm.prank(admin);
         beamState.rely(address(0x123));
         assertEq(beamState.wards(address(0x123)), 1, "admin should be able to rely through its BeamState ward");
+
+        // The pauser can pause the Timelock
+        vm.prank(pauser);
+        timelock.pause();
+        assertTrue(timelock.paused(), "timelock should be paused");
     }
 
     function testDeployRevertsOnZeroAdmin() public {
