@@ -39,7 +39,7 @@ struct L2PASDeployerConfig {
     address[] cancellers; // timelock CANCELLER_ROLE holders
     address[] pausers; // timelock PAUSER_ROLE holders
 
-    uint256 hop; // global fallback minimum cooldown in seconds between rate limits increases, enforced per (RateLimits, key).
+    uint256 hop; // global fallback minimum cooldown in seconds between rate limit increases, enforced per (RateLimits, key).
     uint256 maxChange; // global WAD-scaled growth multiplier (e.g., 1.2e18 = current value x 1.2)
     address[] rateLimits; // RateLimits contracts the Configurator can update
     address[] controllers; // Controller contracts the Configurator can call

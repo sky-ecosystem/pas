@@ -24,6 +24,8 @@ import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
 import { Timelock } from "src/timelock/Timelock.sol";
 import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
+import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract L2PASDeployerTest is DssTest {
 
@@ -145,7 +147,7 @@ contract L2PASDeployerTest is DssTest {
             assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), cfg.pausers[i]), "configured pauser should hold Timelock PAUSER_ROLE");
         }
 
-        // Events: nothing has been granted or registered outside the configured set during deploy
+        // Events: nothing has been granted or registered outside the configured set during deployment
         uint256 roleActions;
         uint256 initRateLimits;
         uint256 initControllerActions;
@@ -256,6 +258,44 @@ contract L2PASDeployerTest is DssTest {
         assertFalse(timelock.paused(), "timelock should not be paused");
 
         _assertOwnershipHandedOver(pas);
+    }
+
+    function testDeployedInstanceIsOperableByGovernance() public {
+        _fullConfig();
+        (PASInstance memory pas,) = _deploy();
+
+        BeamState beamState = BeamState(pas.beamState);
+        Timelock timelock = Timelock(payable(pas.timelock));
+
+        uint256 newHop = 2 hours;
+        address[] memory targets = new address[](1);
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory payloads = new bytes[](1);
+        targets[0] = pas.beamState;
+        payloads[0] = abi.encodeCall(BeamState.setHop, (address(0), newHop));
+
+        // Paused at handoff: nothing can be scheduled yet
+        vm.prank(coreCouncil);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        timelock.scheduleBatch(targets, values, payloads, bytes32(0), bytes32(0), MIN_DELAY);
+
+        // The admin can unpause the Timelock
+        vm.prank(admin);
+        timelock.unpause();
+
+        // coreCouncil can schedule actions through the Timelock
+        vm.prank(coreCouncil);
+        timelock.scheduleBatch(targets, values, payloads, bytes32(0), bytes32(0), MIN_DELAY);
+
+        // Execution is permissionless after minDelay
+        vm.warp(block.timestamp + MIN_DELAY);
+        timelock.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
+        assertEq(beamState.hop(address(0)), newHop, "global hop should be updated through the Timelock");
+
+        // BeamState admin can rely new addresses
+        vm.prank(admin);
+        beamState.rely(address(0x123));
+        assertEq(beamState.wards(address(0x123)), 1, "admin should be able to rely through its BeamState ward");
     }
 
     function testDeployRevertsOnZeroAdmin() public {
