@@ -20,6 +20,10 @@ Extended OpenZeppelin TimelockController with pausing support, permissionless ex
 
 Emergency governance contract that allows authorized parties to trigger circuit breakers. Can call `stop()` on BeamState to halt Configurator operations and `pause()` on Timelock to block scheduling and execution. Callable by the owner or via the Chief's hat through the authority.
 
+### L2PASDeployer
+
+One-time deployer that deploys and initializes a full PAS instance (BeamState, Configurator and Timelock) in its constructor.
+
 ## Unlimited rate limits
 
 A rate limit key is treated as unlimited — the Configurator forces any cBeam call to keep it at `(max, 0)` and rejects any attempt to lower it — in either of these cases:
