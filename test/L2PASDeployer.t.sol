@@ -145,7 +145,7 @@ contract L2PASDeployerTest is DssTest {
             assertTrue(timelock.hasRole(timelock.PAUSER_ROLE(), cfg.pausers[i]), "configured pauser should hold Timelock PAUSER_ROLE");
         }
 
-        // Events: nothing have been granted or registered outside the configured set during deploy
+        // Events: nothing has been granted or registered outside the configured set during deploy
         uint256 roleActions;
         uint256 initRateLimits;
         uint256 initControllerActions;
@@ -168,7 +168,7 @@ contract L2PASDeployerTest is DssTest {
                 else if (role == timelock.EXECUTOR_ROLE())      ok = account == address(0);
                 else if (role == timelock.PROPOSER_ROLE())      ok = account == cfg.coreCouncil;
                 else if (role == timelock.CANCELLER_ROLE())     ok = account == cfg.coreCouncil || _contains(cfg.cancellers, account);
-                else if (role == timelock.PAUSER_ROLE())        ok =  (cfg.timelockPaused && account == address(deployer)) || _contains(cfg.pausers, account);
+                else if (role == timelock.PAUSER_ROLE())        ok = (cfg.timelockPaused && account == address(deployer)) || _contains(cfg.pausers, account);
                 assertTrue(ok, "unexpected Timelock role grant");
             }
         }
@@ -278,7 +278,7 @@ contract L2PASDeployerTest is DssTest {
         uint256 endGas = gasleft();
         uint256 totalGas = startGas - endGas;
 
-        // Fail if deploy is too expensive (higher than EIP-7825 tx gas limit cap: 2^24)
+        // Fail if deployment is too expensive (higher than EIP-7825 tx gas limit cap: 2^24)
         assertLe(totalGas, 2 ** 24, "L2PASDeployer deployment cost too high");
     }
 
