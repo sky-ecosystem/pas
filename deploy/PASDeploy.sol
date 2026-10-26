@@ -16,7 +16,6 @@
 
 pragma solidity ^0.8.24;
 
-import { ScriptTools } from "dss-test/ScriptTools.sol";
 import { PASInstance } from "./PASInstance.sol";
 import { BeamState } from "src/BeamState.sol";
 import { Configurator } from "src/Configurator.sol";
@@ -36,7 +35,10 @@ library PASDeploy {
             minDelay,
             owner
         ));
-        ScriptTools.switchOwner(pasInstance.beamState, deployer, owner);
+        if (deployer != owner) {
+            BeamState(pasInstance.beamState).rely(owner);
+            BeamState(pasInstance.beamState).deny(deployer);
+        }    
     }
 
     function deployMom(
